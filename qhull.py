@@ -6,14 +6,24 @@ from utils import check_argv
 
 class Qhull(object):
 
-    def __init__(self, points):
+    def __init__(self, points, verbose=False):
         self.points = set(points)
         self.vertices = set()
         self.qhull = set()
+        self.simplices = []
+        self.verbose = verbose
 
     def compute(self):
         self.qhull = ConvexHull(list(self.points))
+        self.simplices = self.qhull.simplices
         self.vertices = self.qhull.vertices
+        if self.verbose:
+            print "Computed MCH with ", len(self.vertices)," points"
+            print 'This are the points:'
+            print(self.vertices)
+            print "Computed MCH with ", len(self.simplices)," simplices"
+            print 'This are them:'
+            print(self.simplices)
         return len(self.qhull.vertices)
 
 

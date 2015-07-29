@@ -16,14 +16,14 @@ class PacH(object):
 
     def pach(self):
         start_time = time.time()
-        self.parser = XesParser(self.filename)
+        self.parser = XesParser(self.filename, verbose=self.verbose)
         self.parser.parikhs_vector()
         if self.verbose:
             print 'Parikhs vector ready. Calculating MCH'
             elapsed_time = time.time() - start_time
             print '# RESULTADO  obtenido en: ', elapsed_time
             print '#'*40+'\n'
-        self.qhull = Qhull(self.parser.points)
+        self.qhull = Qhull(self.parser.points, verbose=self.verbose)
         ret = self.qhull.compute()
         elapsed_time = time.time() - start_time
         if self.verbose:

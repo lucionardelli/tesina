@@ -7,7 +7,7 @@ import pdb
 
 class XesParser(object):
 
-    def __init__(self,xes_file_name):
+    def __init__(self,xes_file_name, verbose=False):
         if not isfile(xes_file_name):
             raise Exception("El archivo especificado no existe")
         self.filename = xes_file_name
@@ -20,6 +20,7 @@ class XesParser(object):
         self.max_len_idx = None
         self.event_dictionary = {}
         self.dimension = 0
+        self.verbose = verbose
 
     def parse(self):
         self._parse()
@@ -31,6 +32,12 @@ class XesParser(object):
             # Havent even parsed the file!
             self.parse()
         self._make_parikhs_vector()
+        if self.verbose:
+            for trace in self.pv_list:
+                print 'Traza {0} with points:'.format(trace)
+                for point in self.pv_list[trace]:
+                    print(point)
+
         return True
 
     def _parse(self):
@@ -105,16 +112,11 @@ def main():
                 raise Exception('Filename does not end in .xes')
             if not isfile(filename):
                 raise Exception("El archivo especificado no existe")
-            obj = XesParser(filename)
+            obj = XesParser(filename, verbose='--verbose' in sys.argv)
             obj.parse()
             if '--verbose' in sys.argv:
                 print 'Parse done. Calcuting Parikhs vector'
             obj.parikhs_vector()
-            if '--verbose' in sys.argv:
-                for trace in obj.pv_list:
-                    print 'Traza {0} with points:'.format(trace)
-                    for point in obj.pv_list[trace]:
-                        print(point)
             print "#"*15
             print 'Se encontraron {0} puntos en un espacio de dimensión {1}'.format(
                     len(obj.points), obj.dimension)
