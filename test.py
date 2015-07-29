@@ -3,8 +3,8 @@
 from random import random
 import time
 
-DIMENSION = 9
-POINTS = 1000
+DIMENSION = 4
+POINTS = 10
 
 class Tester():
     def __init__(self, method=None, dim=DIMENSION, points=POINTS):
@@ -27,7 +27,7 @@ class Tester():
         self.hiperspace = hiperspace
         return self.hiperspace
 
-    def run_test(self, dim=DIMENSION,points=POINTS):
+    def run_test(self):
         if self.hiperspace is None:
             self.make_hiperspace()
         start_time = time.time()
