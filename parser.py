@@ -19,7 +19,7 @@ class XesParser(object):
         self.max_len = 0
         self.max_len_idx = None
         self.event_dictionary = {}
-        self.dimension = 0
+        self.dim = 0
         self.verbose = verbose
 
     def parse(self):
@@ -29,7 +29,7 @@ class XesParser(object):
 
     def parikhs_vector(self):
         if not self.parsed:
-            # Havent even parsed the file!
+            # Haven't even parsed the file!
             self.parse()
         self._make_parikhs_vector()
         if self.verbose:
@@ -37,7 +37,6 @@ class XesParser(object):
                 print 'Traza {0} with points:'.format(trace)
                 for point in self.pv_list[trace]:
                     print(point)
-
         return True
 
     def _parse(self):
@@ -69,14 +68,14 @@ class XesParser(object):
                 if tr_val['length'] > self.max_len:
                     self.max_len = tr_val['length']
                     self.max_len_idx = idx
-        self.dimension = len(self.event_dictionary)
+        self.dim = len(self.event_dictionary)
         return True
 
     def _make_parikhs_vector(self):
         """
             make parickhs vector of all traces
         """
-        hiper_zero = [0]*self.dimension
+        hiper_zero = [0]*self.dim
         # El zero siempre pertencene a todos los Parikhs vector
         self.points.add(tuple(hiper_zero))
         for idx,trace in self.traces.items():
@@ -88,10 +87,11 @@ class XesParser(object):
                 # y agregar la nueva
                 last_pv = list(this_pv_list[-1])
                 add_to_position(last_pv, pos, value=1)
+                # Lo agregamos al conjunto de todos los puntos
                 self.points.add(tuple(last_pv))
+                # Agregamos el parikh vector al látice de todos los puntos
                 this_pv_list.append(last_pv)
         return True
-
 
 
 def main():

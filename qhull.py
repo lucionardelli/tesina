@@ -1,22 +1,27 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
 from pyhull.convex_hull import ConvexHull
+from pyhull import qconvex
 import pdb
-from utils import check_argv
+from utils import check_argv, parse_hs_output
+from halfspace import Halfspace
+from custom_exceptions import IncorrectOutput, CannotGetHull
 
 class Qhull(object):
 
     def __init__(self, points, verbose=False):
         self.points = set(points)
         self.vertices = set()
-        self.qhull = set()
+        self.__qhull = set()
         self.simplices = []
+        self.facets = []
         self.verbose = verbose
 
     def compute(self):
-        self.qhull = ConvexHull(list(self.points))
-        self.simplices = self.qhull.simplices
-        self.vertices = self.qhull.vertices
+        self.__qhull = ConvexHull(list(self.points))
+        self.simplices = self.__qhull.simplices
+        self.vertices = self.__qhull.vertices
+        self.dim = self.__qhull.dim
         if self.verbose:
             print "Computed MCH with ", len(self.vertices)," points"
             print 'This are the points:'
@@ -24,14 +29,61 @@ class Qhull(object):
             print "Computed MCH with ", len(self.simplices)," simplices"
             print 'This are them:'
             print(self.simplices)
-        return len(self.qhull.vertices)
+        return len(self.vertices)
 
+    def compute_hs(self):
+        output = qconvex('n',list(self.points))
+        try:
+            dim, facets_nbr, facets = parse_hs_output(output)
+        except IncorrectOutput:
+            raise CannotGetHull()
+        self.dim = dim
+        # Use MY Halfspace
+        #self.facets = [Halfspace(facet.normal,facet.offset) for facet in facets]
+        self.facets = facets
+        if self.verbose:
+            print "Computed MCH with ",facets_nbr," halfspaces"
+            print 'This are them:\n'
+            for facet in self.facets:print facet
+        return self.dim
+
+
+    def union(self, facets):
+        """
+         Merge to a list of facets
+        """
+        fdim = None
+        for facet in facets:
+            if fdim is None:
+                fdim = facet.dim
+            else:
+                assert fdim == facet.dim, "Not all facets to be merge hava the"\
+                        " same dimension!"
+        if fdim is not None and self.dim != fdim:
+            raise ValueError("Convex Hulls and facets must live in the same"\
+                    " dimension!")
+        self.facets = list(set(self.facets) | set(facets))
+
+    def is_inside(self,outsider):
+        ret = True
+        for facet in self.facets:
+            if not facet.inside(outsider):
+                ret = False
+                break
+        return ret
+
+    def restrict_to(self, outsider):
+        facets = list(self.facets)
+        popped = 0
+        for idx,facet in enumerate(self.facets):
+            if not facet.inside(outsider):
+                facets.pop(idx - popped)
+                popped += 1
+        self.facets = facets
 
 def main():
-    usage = """
-        Usage: ./qhull <points> [--debug][--verbose]
-    """
-    if not check_argv(sys.argv, minimum=1, maximum=4):
+    usage = 'Usage: ./qhull <points> [--debug][--verbose]'
+    if not check_argv(sys.argv, minimum=1, maximum=5):
         print usage
         ret =  -1
     else:
@@ -58,7 +110,7 @@ def main():
                 ret = -1
                 print "We are sorry. We weren't able to read the points"
             else:
-                qhull = Qhull(points)
+                qhull = Qhull(points, verbose='--verbose' in sys.argv)
                 point_qty = qhull.compute()
                 print "Computed MCH with ", point_qty," points"
                 if '--verbose' in sys.argv:
