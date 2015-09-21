@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: UTF-8
 """
 This module inherits pyhull halfspace class to add basic functionality
 that the other modules lacks of
@@ -6,7 +8,7 @@ that the other modules lacks of
 __author__ = "Lucio Nardelli"
 __version__ = "0.1"
 __maintainer__ = "Lucio Nardelli"
-__email__ = "luci@fceia.unr.edu.ar"
+__email__ = "lucio (at) fceia.unr.edu.ar"
 __date__ = "August 27, 2015"
 
 from pyhull.halfspace import Halfspace
@@ -21,6 +23,17 @@ class Halfspace(Halfspace):
         super(Halfspace,self).__init__(normal, offset)
         self.dim = len(normal)
 
+    def __hash__(self):
+        return hash(str(self.normal + [self.offset]))
+
+    def __eq__(self, other):
+        if type(other) is type(self):
+            return self.__dict__ == other.__dict__
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def __repr__(self):
         return self.__str__()
 
@@ -30,7 +43,7 @@ class Halfspace(Halfspace):
         for idx in xrange(self.dim):
             hs_repr.append("{0:.2f} x{1}".format(self.normal[idx], idx))
         hs_repr = ' + '.join(hs_repr)
-        return "{0}\n\t {1} + {2:.2f} <= 0".format(header, hs_repr, self.offset)
+        return "\n{0}\t {1} + {2:.2f} <= 0".format(header, hs_repr, self.offset)
 
     def inside(self, point):
         """
@@ -49,3 +62,21 @@ class Halfspace(Halfspace):
         except Exception, err:
             raise WrongDimension()
         return eq_res < 0.0 or almost_equal(eq_res, 0.0, tolerance=0.0001)
+
+    def extend_dimension(self, dim, ext_dict):
+        """
+            dim: the dimension to exetend to
+            ext_dict: a list of the "old" points position
+                      in the new qhull (given in order)
+        """
+        self.dim = dim
+        normal = []
+        for axis in xrange(dim):
+            if axis in ext_dict:
+                # El eje pertenece a una dimensión "de los viejas"
+                idx = ext_dict.index(axis)
+                normal.append(self.normal[idx])
+            else:
+                normal.append(0)
+        self.normal = normal
+

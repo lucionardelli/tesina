@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
 from halfspace import Halfspace
-from custom_exceptions import IncorrectOutput
+from custom_exceptions import IncorrectOutput,CannotProject
+import numpy as np
+
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
     for i in xrange(0, len(l), n):
@@ -34,7 +36,7 @@ def parse_hs_output(output):
      output: (dimension,nbr_facets,[halfspaces])
     """
     try:
-        dim = output.pop(0)
+        dim = int(output.pop(0)) - 1
         facets_nbr = output.pop(0)
         prepare = [[float(i) for i in row.strip().split()]
                 for row in output]
@@ -46,3 +48,41 @@ def parse_hs_output(output):
 def almost_equal(f1, f2, tolerance=0.00001):
     return abs(f1 - f2) <= tolerance * max(abs(f1), abs(f2))
 
+def get_positions(eigenvector, cluster):
+    evect = list(eigenvector)
+    ret = []
+    for val in cluster:
+        ret.append(evect.index(val))
+    return ret
+
+def project(points, eigen, cluster, max_size=None):
+    max_size = max_size or len(cluster)
+    ret = []
+    # Por cada variable en el cluster
+    # busco el valor correspondiente en los puntos iniciales
+    # y lo agrego a mi resultado
+    # Los voy recorriendo en "orden de correlación"
+    cluster.sort(key=lambda x: abs(x), reverse=True)
+    positions = get_positions(eigen, cluster)
+    # Nos limitamos al máximo numero de elementos en un cluster
+    positions = positions[0:max_size]
+    for point in points:
+        proj_point = []
+        for pos in positions:
+            proj_point.append(point[pos])
+        ret.append(proj_point)
+    return map(tuple,ret)
+
+def qhull_extend(qhull, eigen, cluster):
+    """
+     Given a qhull computed from a cluster (i.e. projection)
+     "extended" it (making all the other variables zero)
+     to the original dimension
+    """
+    # Nuevamente los odeno y busco la posición
+    # en el eigenvector original. Luego "agrando"
+    # el qhull en concordancia
+    cluster.sort(key=lambda x: abs(x), reverse=True)
+    positions = get_positions(eigen, cluster)
+    qhull.extend_dimension(len(eigen), positions)
+    return qhull

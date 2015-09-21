@@ -12,12 +12,12 @@ class Qhull(object):
     def __init__(self, points, verbose=False):
         self.points = set(points)
         self.vertices = set()
-        self.__qhull = set()
+        self.__qhull = None
         self.simplices = []
         self.facets = []
         self.verbose = verbose
 
-    def compute(self):
+    def compute_vertices(self):
         self.__qhull = ConvexHull(list(self.points))
         self.simplices = self.__qhull.simplices
         self.vertices = self.__qhull.vertices
@@ -31,15 +31,13 @@ class Qhull(object):
             print(self.simplices)
         return len(self.vertices)
 
-    def compute_hs(self):
+    def compute_hiperspaces(self):
         output = qconvex('n',list(self.points))
         try:
             dim, facets_nbr, facets = parse_hs_output(output)
         except IncorrectOutput:
             raise CannotGetHull()
         self.dim = dim
-        # Use MY Halfspace
-        #self.facets = [Halfspace(facet.normal,facet.offset) for facet in facets]
         self.facets = facets
         if self.verbose:
             print "Computed MCH with ",facets_nbr," halfspaces"
@@ -47,10 +45,9 @@ class Qhull(object):
             for facet in self.facets:print facet
         return self.dim
 
-
     def union(self, facets):
         """
-         Merge to a list of facets
+         Merge hull to a list of facets
         """
         fdim = None
         for facet in facets:
@@ -59,6 +56,7 @@ class Qhull(object):
             else:
                 assert fdim == facet.dim, "Not all facets to be merge hava the"\
                         " same dimension!"
+        # If fdim is None the facets to merge is empty. We can always do that
         if fdim is not None and self.dim != fdim:
             raise ValueError("Convex Hulls and facets must live in the same"\
                     " dimension!")
@@ -80,6 +78,16 @@ class Qhull(object):
                 facets.pop(idx - popped)
                 popped += 1
         self.facets = facets
+
+    def extend_dimension(self, dim, ext_dict):
+        """
+            dim: the dimension to exetend to
+            ext_dict: a list of the "old" points position
+                      in the new qhull (given in order)
+        """
+        self.dim = dim
+        for facet in self.facets:
+            facet.extend_dimension(dim, ext_dict)
 
 def main():
     usage = 'Usage: ./qhull <points> [--debug][--verbose]'

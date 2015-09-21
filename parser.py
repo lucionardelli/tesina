@@ -4,6 +4,9 @@ from os.path import isfile
 from lxml import etree
 from utils import add_to_position, check_argv
 import pdb
+import numpy as np
+
+from corrmatrix import CorrMatrix
 
 class XesParser(object):
 
@@ -11,9 +14,11 @@ class XesParser(object):
         if not isfile(xes_file_name):
             raise Exception("El archivo especificado no existe")
         self.filename = xes_file_name
-        self.pv_list = {}
+        # Diferent presentation of Parikhs Vectors
+        self.pv_set = set()
+        self.pv_array = np.array([])
+        self.pv_traces = {}
         self.parsed = False
-        self.points = set()
         self.root = None
         self.traces = {}
         self.max_len = 0
@@ -21,23 +26,6 @@ class XesParser(object):
         self.event_dictionary = {}
         self.dim = 0
         self.verbose = verbose
-
-    def parse(self):
-        self._parse()
-        self.parsed = True
-        return self.parsed
-
-    def parikhs_vector(self):
-        if not self.parsed:
-            # Haven't even parsed the file!
-            self.parse()
-        self._make_parikhs_vector()
-        if self.verbose:
-            for trace in self.pv_list:
-                print 'Traza {0} with points:'.format(trace)
-                for point in self.pv_list[trace]:
-                    print(point)
-        return True
 
     def _parse(self):
         """
@@ -71,28 +59,48 @@ class XesParser(object):
         self.dim = len(self.event_dictionary)
         return True
 
+    def parse(self):
+        self._parse()
+        self.parsed = True
+        return self.parsed
+
     def _make_parikhs_vector(self):
         """
             make parickhs vector of all traces
         """
-        hiper_zero = [0]*self.dim
+        hiper_zero = np.array([0]*self.dim)
         # El zero siempre pertencene a todos los Parikhs vector
-        self.points.add(tuple(hiper_zero))
+        self.pv_set.add(tuple(hiper_zero))
         for idx,trace in self.traces.items():
-            this_pv_list = self.pv_list.setdefault(idx,[hiper_zero])
+            # El zero siempre pertencene a todos los Parikhs vector
+            this_pv_trace = self.pv_traces.setdefault(idx,[hiper_zero])
             for val in trace['trace']:
                 # No hay valor por defecto, debería estar siempre en el dict
                 pos = self.event_dictionary.get(val)
                 # Necesitamos una copia de la última lista para modificarla
-                # y agregar la nueva
-                last_pv = list(this_pv_list[-1])
+                # y sumarle una ocurrencia al evento
+                last_pv = this_pv_trace[-1].copy()
                 add_to_position(last_pv, pos, value=1)
                 # Lo agregamos al conjunto de todos los puntos
-                self.points.add(tuple(last_pv))
+                self.pv_set.add(tuple(last_pv))
                 # Agregamos el parikh vector al látice de todos los puntos
-                this_pv_list.append(last_pv)
+                this_pv_trace.append(last_pv)
+        self.pv_array = np.array(list(self.pv_set))
         return True
 
+    def parikhs_vector(self):
+        if not self.parsed:
+            # Haven't even parsed the file!
+            self.parse()
+        self._make_parikhs_vector()
+        if self.verbose:
+            for trace in self.pv_traces:
+                print 'Traza {0} with points:'.format(trace)
+                for point in self.pv_traces[trace]:
+                    print(point)
+            print 'Se encontraron {0} puntos en un espacio de dimensión {1}'.format(
+                    len(self.pv_set), self.dim)
+        return True
 
 def main():
     usage = """
@@ -116,11 +124,11 @@ def main():
             obj.parse()
             if '--verbose' in sys.argv:
                 print 'Parse done. Calcuting Parikhs vector'
+            obj.parse()
             obj.parikhs_vector()
-            print "#"*15
-            print 'Se encontraron {0} puntos en un espacio de dimensión {1}'.format(
-                    len(obj.points), obj.dimension)
-            print "#"*15
+            CorrMatrix(obj.pv_array)
+            if '--verbose' in sys.argv:
+                print "#"*15
         except Exception, err:
             ret = 1
             if hasattr(err, 'message'):
