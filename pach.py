@@ -220,7 +220,7 @@ def main():
             proj_connected = True
             if '--projection' in sys.argv or '-p' in sys.argv:
                 # None indicates not to do projection.
-                # False indicates heuristic limit
+                # False indicates no limit
                 proj_size = False
                 proj_idx = '-p' in sys.argv and sys.argv.index('-p') or\
                     sys.argv.index('--projection')
