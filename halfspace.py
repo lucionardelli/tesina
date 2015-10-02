@@ -15,13 +15,18 @@ from pyhull.halfspace import Halfspace
 
 import numpy as np
 
+from utils import almost_equal, gcd
+from rationals import rationalize, make_common_divisor
+
 class Halfspace(Halfspace):
     """
     A halfspace defined by dot(normal, coords) + offset <= 0
     """
-    def __init__(self, normal, offset):
+    def __init__(self, normal, offset, integer_vals=True):
         super(Halfspace,self).__init__(normal, offset)
         self.dim = len(normal)
+        if integer_vals:
+            self.integerify()
 
     def __hash__(self):
         return hash(str(self.normal + [self.offset]))
@@ -37,13 +42,24 @@ class Halfspace(Halfspace):
     def __repr__(self):
         return self.__str__()
 
+    def __contains__(self, element):
+        return self.inside(element)
+
     def __str__(self):
-        header = "Halfspace in dimension {0}".format(self.dim)
+        header = "HS dim {0}".format(self.dim)
+        hs_repr = []
+        for idx in xrange(self.dim):
+            hs_repr.append("{0: >4} x{1: <3}".format(self.normal[idx], idx))
+        hs_repr = ' + '.join(hs_repr)
+        return "{0: <12}{1} + {2: >3} <= 0".format(header, hs_repr, self.offset)
+
+    def __fstr__(self):
+        header = "HS in dim {0}".format(self.dim)
         hs_repr = []
         for idx in xrange(self.dim):
             hs_repr.append("{0:.2f} x{1}".format(self.normal[idx], idx))
         hs_repr = ' + '.join(hs_repr)
-        return "\n{0}\t {1} + {2:.2f} <= 0".format(header, hs_repr, self.offset)
+        return "{0}\t{1} + {2:.2f} <= 0".format(header, hs_repr, self.offset)
 
     def inside(self, point):
         """
@@ -54,9 +70,6 @@ class Halfspace(Halfspace):
         Args:
             origin: point to check if is in the hyperplane
         """
-        # For some reaons cannot import utils here...
-        def almost_equal(f1, f2, tolerance=0.00001):
-            return abs(f1 - f2) <= tolerance * max(abs(f1), abs(f2))
         try:
             eq_res = np.dot(self.normal,point) + self.offset
         except Exception, err:
@@ -79,4 +92,44 @@ class Halfspace(Halfspace):
             else:
                 normal.append(0)
         self.normal = normal
+
+    def axis_intersection(self, axis):
+        # Buscamos la intersección del hiperespacio con el eje 'axis'
+        ret = 0
+        if self.normal[axis]:
+            ret = (-1 * self.offset) / self.normal[axis]
+        return ret
+
+    def integerify(self):
+        # Si alguno de los valores no es un entero,
+        # buscamos una representación equivalente
+        # del hiperespacio a valores enteros
+        if any(map(lambda x: not x.is_integer(), self.normal)):
+            numerators = []
+            denominators = []
+            for idx in xrange(self.dim):
+                num, den = rationalize(self.normal[idx])
+                numerators.append(num)
+                denominators.append(den)
+            num, den = rationalize(self.offset)
+            numerators.append(num)
+            denominators.append(den)
+
+            numerators, denominators = make_common_divisor(numerators,
+                                                           denominators)
+            # Todas las fracciones poseen el mismo denominador
+            # Por lo que puedo multiplar el hiperplano por el denominador
+            # Y el hiperplano no debería cambiar
+
+            # Intentamos mantener los valores lo más pequeños posible
+            # En general no debería hacer nada
+            use_gcd = abs(gcd(*numerators))
+            if use_gcd != 1:
+                numerators = map(lambda x: x/use_gcd, numerators)
+
+            self.offset = numerators[-1]
+            self.normal = numerators[:-1]
+        else:
+            self.offset = int(self.offset)
+            self.normal = map(int,self.normal)
 

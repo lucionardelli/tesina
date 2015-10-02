@@ -3,7 +3,7 @@
 from pyhull.convex_hull import ConvexHull
 from pyhull import qconvex
 import pdb
-from utils import check_argv, parse_hs_output
+from utils import check_argv, get_positions
 from halfspace import Halfspace
 from custom_exceptions import IncorrectOutput, CannotGetHull
 
@@ -16,6 +16,25 @@ class Qhull(object):
         self.simplices = []
         self.facets = []
         self.verbose = verbose
+
+    def __parse_hs_output(self, output):
+        """
+         input: Output string for ConvexHull
+            The first line is the dimension.
+            The second line is the number of facets.
+            Each remaining line is the hyperplane's coefficient
+                followed by its offset.
+         output: (dimension,nbr_facets,[halfspaces])
+        """
+        try:
+            dim = int(output.pop(0)) - 1
+            facets_nbr = output.pop(0)
+            prepare = [[float(i) for i in row.strip().split()]
+                    for row in output]
+            facets = [Halfspace(out[:-1],out[-1]) for out in prepare]
+        except:
+            raise IncorrectOutput()
+        return (dim, facets_nbr, facets)
 
     def compute_vertices(self):
         self.__qhull = ConvexHull(list(self.points))
@@ -34,7 +53,7 @@ class Qhull(object):
     def compute_hiperspaces(self):
         output = qconvex('n',list(self.points))
         try:
-            dim, facets_nbr, facets = parse_hs_output(output)
+            dim, facets_nbr, facets = self.__parse_hs_output(output)
         except IncorrectOutput:
             raise CannotGetHull()
         self.dim = dim
@@ -88,6 +107,20 @@ class Qhull(object):
         self.dim = dim
         for facet in self.facets:
             facet.extend_dimension(dim, ext_dict)
+
+    def extend(self, eigen, cluster):
+        """
+         Given a qhull computed from a cluster (i.e. projection)
+         "extended" it (making all the other variables zero)
+         to the original dimension
+        """
+        # Nuevamente los odeno y busco la posición
+        # en el eigenvector original. Luego "agrando"
+        # el qhull en concordancia
+        cluster.sort(key=lambda x: abs(x), reverse=True)
+        positions = get_positions(eigen, cluster)
+        self.extend_dimension(len(eigen), positions)
+
 
 def main():
     usage = 'Usage: ./qhull <points> [--debug][--verbose]'

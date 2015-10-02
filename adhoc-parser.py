@@ -34,7 +34,6 @@ class XesParser(object):
         """
         xs[position] += value
 
-
     def _parse(self):
         """
             parse xes file given as argument,
@@ -42,28 +41,21 @@ class XesParser(object):
                 the maximum lenght in between all traces
                 the (first) trace where this maximum is reached
         """
-        tree = etree.parse(self.filename)
-        self.root = tree.getroot()
-        # Iteramos sobre todas las trazas
-        for idx, trace in enumerate(self.root.iterchildren(tag='{*}trace')):
-            # Iteramos sobre todos los eventos de la traza
-            for event_idx, event in enumerate(trace.iterchildren(tag='{*}event')):
-                # Solo nos interesa el valor
-                values = [x.get('value') for x in\
-                    event.iterchildren(tag='{*}string')\
-                        if x.get('key') == "concept:name"]
-                assert len(values) == 1, "No se puede obetner el  valor para el "\
-                        "evento {0} de la traza {1}".format(event_idx, idx)
-                value = values[0]
-                # Buscamos la lista de puntos de la traza
-                tr_val = self.traces.setdefault(idx,{'trace': [], 'length': 0,})
-                if value not in self.event_dictionary:
-                    self.event_dictionary[value] = len(self.event_dictionary)
-                tr_val['trace'].append(value)
-                tr_val['length'] += 1
-                if tr_val['length'] > self.max_len:
-                    self.max_len = tr_val['length']
-                    self.max_len_idx = idx
+        with open('asd','r') as ffile:
+            # Iteramos sobre todas las trazas
+            for idx, trace in enumerate(ffile.readlines()):
+                # Iteramos sobre todos los eventos de la traza
+                trace = trace.replace('  \n','')
+                for event_idx, value in enumerate(trace.split('  ')):
+                    # Buscamos la lista de puntos de la traza
+                    tr_val = self.traces.setdefault(idx,{'trace': [], 'length': 0,})
+                    if value not in self.event_dictionary:
+                        self.event_dictionary[value] = len(self.event_dictionary)
+                    tr_val['trace'].append(value)
+                    tr_val['length'] += 1
+                    if tr_val['length'] > self.max_len:
+                        self.max_len = tr_val['length']
+                        self.max_len_idx = idx
         self.dim = len(self.event_dictionary)
         return True
 
@@ -122,19 +114,13 @@ def main():
         try:
             if '--debug' in sys.argv:
                 pdb.set_trace()
-            filename = sys.argv[1]
-            if not filename.endswith('.xes'):
-                print filename, ' does not end in .xes. It should...'
-                raise Exception('Filename does not end in .xes')
-            if not isfile(filename):
-                raise Exception("El archivo especificado no existe")
-            obj = XesParser(filename, verbose='--verbose' in sys.argv)
+            obj = XesParser('asd', verbose='--verbose' in sys.argv)
             obj.parse()
             if '--verbose' in sys.argv:
                 print 'Parse done. Calcuting Parikhs vector'
             obj.parse()
             obj.parikhs_vector()
-            CorrMatrix(obj.pv_array)
+            CorrMatrix(obj.pv_array, verbose=True)
             if '--verbose' in sys.argv:
                 print "#"*15
         except Exception, err:
