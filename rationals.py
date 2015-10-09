@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
 
-# Float numbers will consider this much decimal part
+# Float numbers will consider this many decimal part
 TRUNCATE=2
+# Upper limit for LCM
+LCM_LIMIT=200
 
 from fractions import Fraction
 import numpy as np
@@ -48,6 +50,10 @@ def integer_coeff(float_list):
             aux.append(rel)
         relations.append(aux)
         mcm = abs(lcm(*[x for x in aux if x!= 0]))
+        if mcm > LCM_LIMIT:
+            # Al buscar el múltiplo, a veces obtenemos valores muy grandes
+            # Hay que ignorarlos y buscar un futuro mejor
+            continue
         integerified = [x and mcm/x or 0.0  for x in aux]
         if all([x.is_integer() for x in integerified]):
             return integerified

@@ -221,8 +221,10 @@ class PacH(object):
         places = '\n      <!-- Places -->\n'
         places_list = []
         for idx, place in enumerate(self.facets):
+            # Contamos desde uno
+            idx += 1
             place_id = "place-%04d"%idx
-            place_name = ("%s"%(place)).replace('<=','leq')
+            place_name = ("%s"%(place)).replace('<=','&lt;=')
             places_list.append(
                     '      <place id="%s">\n'\
                     '        <name>\n'\
@@ -237,6 +239,8 @@ class PacH(object):
         transitions = '\n      <!-- Transitions -->\n'
         transitions_list = []
         for idx in xrange(self.dim):
+            # Contamos desde uno
+            idx += 1
             transition_id = 'trans-%04d'%idx
             transition_name = 'Transition %04d'%idx
             transitions_list.append(
@@ -249,15 +253,20 @@ class PacH(object):
 
         arcs = '\n      <!-- Arcs -->\n'
         arcs_list = []
+        seen_arcs = []
         for pl_id,place in enumerate(self.facets):
+            # Contamos desde uno
+            pl_id += 1
+            place_id = 'place-%04d'%(pl_id)
             for tr_id, val in enumerate(place.normal):
-                val = my_round(val)
+                tr_id += 1
+                # Ya es un entero
+                #val = my_round(val)
                 # Si es cero no crear el arco
                 if not val:
                     continue
                 trans_id = 'trans-%04d'%(tr_id)
-                place_id = 'place-%04d'%(pl_id)
-                if val != 1:
+                if abs(val) != 1:
                     arc_value = '<inscription>'\
                             '<text>%s</text>'\
                             '</inscription>'%(val)
@@ -272,6 +281,11 @@ class PacH(object):
                     arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
                     from_id = transition_id
                     to_id = place_id
+                # Evitemos crear arcos repetidos crear arcos repetidos
+                if (from_id, to_id) in seen_arcs:
+                    continue
+                else:
+                    seen_arcs.append((from_id, to_id))
                 arcs_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
                                         %(arc_id,from_id,to_id,arc_value))
         arcs += '\n'.join(arcs_list)
