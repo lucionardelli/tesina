@@ -10,7 +10,7 @@ import numpy as np
 from random import sample
 
 from halfspace import Halfspace
-from custom_exceptions import CannotGetHull, WrongDimension
+from custom_exceptions import CannotGetHull, WrongDimension, CannotIntegerify
 from kmeans import two_means
 
 def sampling(func):
@@ -34,11 +34,14 @@ def sampling(func):
                         qhull.restrict_to(outsider)
                     facets = qhull.facets
                     tries = 0
-                except (CannotGetHull,WrongDimension):
+                except CannotIntegerify, err:
+                    raise err
+                except (CannotGetHull,WrongDimension), err:
                     tries -= 1
                     if tries == 0:
-                        raise Exception('Cannot get MCH. Maybe doing *TOO*'\
-                                ' small sampling')
+                        print 'Cannot get MCH. Maybe doing *TOO*'\
+                                ' small sampling'
+                        raise err
         return qhull
     return do_sampling
 

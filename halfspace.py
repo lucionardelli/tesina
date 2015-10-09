@@ -16,7 +16,7 @@ from pyhull.halfspace import Halfspace
 import numpy as np
 
 from utils import almost_equal, gcd
-from rationals import rationalize, make_common_divisor
+from rationals import integer_coeff
 
 class Halfspace(Halfspace):
     """
@@ -105,30 +105,11 @@ class Halfspace(Halfspace):
         # buscamos una representación equivalente
         # del hiperespacio a valores enteros
         if any(map(lambda x: not x.is_integer(), self.normal)):
-            numerators = []
-            denominators = []
-            for idx in xrange(self.dim):
-                num, den = rationalize(self.normal[idx])
-                numerators.append(num)
-                denominators.append(den)
-            num, den = rationalize(self.offset)
-            numerators.append(num)
-            denominators.append(den)
 
-            numerators, denominators = make_common_divisor(numerators,
-                                                           denominators)
-            # Todas las fracciones poseen el mismo denominador
-            # Por lo que puedo multiplar el hiperplano por el denominador
-            # Y el hiperplano no debería cambiar
+            integerified = integer_coeff(self.normal+[self.offset])
 
-            # Intentamos mantener los valores lo más pequeños posible
-            # En general no debería hacer nada
-            use_gcd = abs(gcd(*numerators))
-            if use_gcd != 1:
-                numerators = map(lambda x: x/use_gcd, numerators)
-
-            self.offset = numerators[-1]
-            self.normal = numerators[:-1]
+            self.offset = integerified[-1]
+            self.normal = integerified[:-1]
         else:
             self.offset = int(self.offset)
             self.normal = map(int,self.normal)

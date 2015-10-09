@@ -15,3 +15,6 @@ class CannotGetClusters(Exception):
 
 class CannotProject(Exception):
     pass
+
+class CannotIntegerify(Exception):
+    pass
