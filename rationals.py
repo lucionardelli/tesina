@@ -49,14 +49,20 @@ def integer_coeff(float_list):
             rel = float(rel)
             aux.append(rel)
         relations.append(aux)
-        mcm = abs(lcm(*[x for x in aux if x!= 0]))
+        mcm = abs(lcm(*[abs(x) for x in aux if x!= 0]))
         if mcm > LCM_LIMIT:
             # Al buscar el múltiplo, a veces obtenemos valores muy grandes
             # Hay que ignorarlos y buscar un futuro mejor
             continue
         integerified = [x and mcm/x or 0.0  for x in aux]
         if all([x.is_integer() for x in integerified]):
-            return integerified
+            return [int(x) for x in integerified]
+    # Mi "peor es nada"
+    mcm = abs(float(lcm(*[Fraction(str(x)) for x in aux if x!= 0])))
+    # Usar esto para ver que tanto se rompe lo del MCM
+    #integerified = [x and mcm/x or 0.0  for x in aux]
+    integerified = [int(x) and mcm/x or 0.0  for x in aux]
+    return integerified
     raise CannotIntegerify("Arrrgh! Cannot integerify equation"
                 "hiperspace (%s). Relations (%s)"%(float_list,relations))
 
