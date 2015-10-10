@@ -26,7 +26,11 @@ class Halfspace(Halfspace):
         super(Halfspace,self).__init__(normal, offset)
         self.dim = len(normal)
         if integer_vals:
-            self.integerify()
+            try:
+              self.integerify()
+            except:
+              import pdb;pdb.set_trace()
+              self.integerify()
 
     def __hash__(self):
         return hash(str(self.normal + [self.offset]))
@@ -47,11 +51,27 @@ class Halfspace(Halfspace):
 
     def __str__(self):
         header = "HS dim {0}".format(self.dim)
-        hs_repr = []
-        for idx in xrange(self.dim):
-            hs_repr.append("{0: >4} x{1: <3}".format(self.normal[idx], idx))
-        hs_repr = ' + '.join(hs_repr)
-        return "{0: <12}{1} + {2: >3} <= 0".format(header, hs_repr, self.offset)
+        hs_repr = ''
+        for idx,coef in enumerate(self.normal):
+            # Queremos dar vuelta el <= a 0 al imprimir
+            if coef > 0:
+                hs_repr += " - {0: >4} x{1: <3}".format(coef,idx)
+            elif coef < 0:
+                hs_repr += " + {0: >4} x{1: <3}".format(abs(coef),idx)
+            else:
+                # Los coeficientes 0 no los imprimimos
+                pass
+        if hs_repr.startswith(' + '):
+            # El primer símbolo no va
+            hs_repr = hs_repr[3:]
+
+        if self.offset > 0:
+            ti_repr = ' -  {0: >3}'.format(self.offset)
+        elif self.offset < 0:
+            ti_repr = ' +  {0: >3}'.format(self.offset)
+        else:
+            ti_repr = ''
+        return "{0: <12}{1} {2} >= 0".format(header, hs_repr, ti_repr)
 
     def __fstr__(self):
         header = "HS in dim {0}".format(self.dim)

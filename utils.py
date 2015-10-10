@@ -21,6 +21,9 @@ def check_argv(argv, minimum=1, maximum=1):
     return ret and all(map(lambda x: type(x) == type(''), argv))
 
 def almost_equal(f1, f2, tolerance=0.00001):
+    # De esta manera evitamos errores al comparar un número con zero
+    f1 += 1
+    f2 += 1
     return abs(f1 - f2) <= tolerance * max(abs(f1), abs(f2))
 
 def get_positions(eigenvector, cluster):

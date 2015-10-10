@@ -3,10 +3,10 @@
 
 # Sin poyección ni sampling
 echo '> Comienza Sin proyec ni sampling'
-echo '> Comienza running-example-just-two-cases.xes'
-./pach.py ../xes_examples/running-example-just-two-cases.xes  --verbose
 echo '> Comienza illustrative_example.xes'
 ./pach.py ../xes_examples/illustrative_example.xes  --verbose
+echo '> Comienza running-example-just-two-cases.xes'
+./pach.py ../xes_examples/running-example-just-two-cases.xes  --verbose
 echo '> Comienza choice.xes'
 ./pach.py ../xes_examples/choice.xes  --verbose
 echo '> Comienza confDimBlocking.xes'

@@ -156,11 +156,13 @@ class PacH(object):
 
     @property
     def qhull(self):
-        return self._qhull or self.get_qhull(self.pv_array)
+        self._qhull = self._qhull or self.get_qhull(self.pv_array)
+        return self._qhull
 
     @property
     def facets(self):
-        return self._facets or self.qhull.facets
+        self._facets =  self._facets or self.qhull.facets
+        return self._facets
 
     @sampling
     @projection
@@ -260,8 +262,6 @@ class PacH(object):
             place_id = 'place-%04d'%(pl_id)
             for tr_id, val in enumerate(place.normal):
                 tr_id += 1
-                # Ya es un entero
-                #val = my_round(val)
                 # Si es cero no crear el arco
                 if not val:
                     continue
@@ -269,7 +269,7 @@ class PacH(object):
                 if abs(val) != 1:
                     arc_value = '<inscription>'\
                             '<text>%s</text>'\
-                            '</inscription>'%(val)
+                            '</inscription>'%(abs(val))
                 else:
                     arc_value = ''
                 if val > 0:
