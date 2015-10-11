@@ -235,7 +235,7 @@ class PacH(object):
                     '        <initialMarking>\n'\
                     '          <text>%d</text>\n'\
                     '        </initialMarking>\n'\
-                    '      </place>'%(place_id,place_name,-1 * place.offset))
+                    '      </place>'%(place_id,place_name,abs(place.offset)))
         places += '\n'.join(places_list)
 
         transitions = '\n      <!-- Transitions -->\n'
@@ -265,7 +265,7 @@ class PacH(object):
                 # Si es cero no crear el arco
                 if not val:
                     continue
-                trans_id = 'trans-%04d'%(tr_id)
+                transition_id = 'trans-%04d'%(tr_id)
                 if abs(val) != 1:
                     arc_value = '<inscription>'\
                             '<text>%s</text>'\
