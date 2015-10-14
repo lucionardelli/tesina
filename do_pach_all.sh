@@ -4,36 +4,48 @@
 # Sin poyección ni sampling
 echo '> Comienza Sin proyec ni sampling'
 echo '> Comienza illustrative_example.xes'
-./pach.py ../xes_examples/illustrative_example.xes  --verbose
+./pach.py ../xes_logs/illustrative_example.xes  --verbose
 echo '> Comienza running-example-just-two-cases.xes'
-./pach.py ../xes_examples/running-example-just-two-cases.xes  --verbose
+./pach.py ../xes_logs/running-example-just-two-cases.xes  --verbose
 echo '> Comienza choice.xes'
-./pach.py ../xes_examples/choice.xes  --verbose
+./pach.py ../xes_logs/choice.xes  --verbose
 echo '> Comienza confDimBlocking.xes'
-./pach.py ../xes_examples/confDimBlocking.xes  --verbose
+./pach.py ../xes_logs/confDimBlocking.xes  --verbose
 echo '> Comienza DriversLicense.xes'
-./pach.py ../xes_examples/DriversLicense.xes  --verbose
+./pach.py ../xes_logs/DriversLicense.xes  --verbose
 echo '> Comienza confDimStacked.xes'
-./pach.py ../xes_examples/confDimStacked.xes  --verbose
+./pach.py ../xes_logs/confDimStacked.xes  --verbose
 
 # Con poyección, sin sampling
 echo ''
 echo '> Comienza Con proyec, sin sampling'
 echo '> Comienza log1.xes'
-./pach.py ../xes_examples/log1.xes --projection
+./pach.py ../xes_logs/log1.xes --projection
 echo '> Comienza a32.xes'
-./pach.py ../xes_examples/a32.xes --projection
+./pach.py ../xes_logs/a32.xes --projection
 echo '> Comienza Angiogenesis-PT-01.xes'
-./pach.py ../xes_examples/Angiogenesis-PT-01.xes --projection
+./pach.py ../xes_logs/Angiogenesis-PT-01.xes --projection
 echo '> Comienza DatabaseWithMutex-PT-02.xes'
-./pach.py ../xes_examples/DatabaseWithMutex-PT-02.xes --projection
+./pach.py ../xes_logs/DatabaseWithMutex-PT-02.xes --projection
 echo '> Comienza cycles5_2.xes'
-./pach.py ../xes_examples/cycles5_2.xes --projection
+./pach.py ../xes_logs/cycles5_2.xes --projection
 echo '> Comienza a42.xes'
-./pach.py ../xes_examples/a42.xes --projection
+./pach.py ../xes_logs/a42.xes --projection
 echo '> Comienza t32.xes'
-./pach.py ../xes_examples/t32.xes --projection
+./pach.py ../xes_logs/t32.xes --projection
 echo '> Comienza Peterson-PT-2.xes'
-./pach.py ../xes_examples/Peterson-PT-2.xes --projection
+./pach.py ../xes_logs/Peterson-PT-2.xes --projection
 echo '> Comienza telecom.xes'
-./pach.py ../xes_examples/telecom.xes --projection
+./pach.py ../xes_logs/telecom.xes --projection
+echo '> Comienza complex.enc.xes'
+./pach.py ../xes_logs/complex.enc.xes --projection
+echo '> Comienza documentflow.xes'
+./pach.py ../xes_logs/documentflow.xes --projection
+echo '> Comienza FHMexampleN5.enc.xes'
+./pach.py ../xes_logs/FHMexampleN5.enc.xes --projection
+echo '> Comienza incident.xes'
+./pach.py ../xes_logs/incident.xes --projection
+echo '> Comienza receipt.xes'
+./pach.py ../xes_logs/receipt.xes --projection
+echo '> Comienza svn.xes'
+./pach.py ../xes_logs/svn.xes --projection

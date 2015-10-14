@@ -8,6 +8,16 @@ def chunks(l, n):
     for i in xrange(0, len(l), n):
         yield l[i:i+n]
 
+def rotate_dict(dictionary):
+    ret = {}
+    for k,v in dictionary.items():
+        if v in ret:
+            raise Exception("This dictonary cannot be rotated."
+                    " Map should be 'biyective'")
+        else:
+            ret[v] = k
+    return ret
+
 def check_argv(argv, minimum=1, maximum=1):
     """
         Ensures that the there are at least minimum and at most maximum strings

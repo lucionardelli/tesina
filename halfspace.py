@@ -26,11 +26,7 @@ class Halfspace(Halfspace):
         super(Halfspace,self).__init__(normal, offset)
         self.dim = len(normal)
         if integer_vals:
-            try:
-              self.integerify()
-            except:
-              import pdb;pdb.set_trace()
-              self.integerify()
+            self.integerify()
 
     def __hash__(self):
         return hash(str(self.normal + [self.offset]))
@@ -66,12 +62,12 @@ class Halfspace(Halfspace):
             hs_repr = hs_repr[3:]
 
         if self.offset > 0:
-            ti_repr = ' -  {0: >3}'.format(self.offset)
+            ti_repr = ' -  {0: >3}'.format(abs(self.offset))
         elif self.offset < 0:
-            ti_repr = ' +  {0: >3}'.format(self.offset)
+            ti_repr = ' +  {0: >3}'.format(abs(self.offset))
         else:
             ti_repr = ''
-        return "{0: <12}{1} {2} >= 0".format(header, hs_repr, ti_repr)
+        return "{0: <10}{1} {2} >= 0".format(header, hs_repr, ti_repr)
 
     def __fstr__(self):
         header = "HS in dim {0}".format(self.dim)

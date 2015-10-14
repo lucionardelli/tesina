@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
 from qhull import Qhull
-from parser import XesParser
+from parser import XesParser, AdHocParser
 from corrmatrix import CorrMatrix
-from utils import check_argv, almost_equal, my_round, get_positions
+from utils import (check_argv, almost_equal, my_round,
+                    get_positions, rotate_dict)
 import pdb
 import time
 import numpy as np
@@ -12,7 +13,6 @@ from random import sample
 from halfspace import Halfspace
 from custom_exceptions import CannotGetHull, WrongDimension, CannotIntegerify
 from kmeans import two_means
-
 def sampling(func):
     def do_sampling(self, points, *args, **kwargs):
         seen_points = set()
@@ -55,9 +55,13 @@ def projection(func):
         else:
             # Hacemos projection
             corr = CorrMatrix(points)
+            corr2 = corr.copy()
             facets = []
             qhull = None
+            projections = {}
+            proj_count = 0
             while True:
+                proj_count += 1
                 # Hacemos una lista de pares (valor, posicion)
                 tup = [(abs(y),x) for x,y in enumerate(corr.eigenvalues)]
                 # la ordenamos ascendentemente por el valor
@@ -77,10 +81,17 @@ def projection(func):
                 leader = eigen_abs.index(max(eigen_abs))
                 leader_row = corr.matrix[leader]
                 #solo utilizamos el cluster de mayor correlación
-                _, cluster1 = two_means(leader_row)
+                _, cluster1 = two_means(leader_row,max_size=self.proj_size)
                 if len(cluster1) <= 1:
-                    break
-                pts_proj = self.project(points, leader_row, cluster1)
+                    if qhull is not None:
+                        break
+                    else:
+                        # Aunque la proyección sea mala,
+                        # tenemos que hacer al menos una.
+                        cluster0,cluster1 = two_means(leader_row)
+                        cluster1.append(max(cluster0))
+                pts_proj, projected = self.project(points, leader_row, cluster1)
+                projections[proj_count] = projected
                 qhull = func(self, pts_proj, *args, **kwargs)
                 # Extendemos a la dimensión original
                 qhull.extend(leader_row, cluster1)
@@ -89,6 +100,32 @@ def projection(func):
                 facets = qhull.facets
                 # Actualizamos la matriz poniendo en 0 los valores usados
                 corr.update(leader, cluster1)
+            if self.proj_connected:
+                # Intentamos hacer que el modelo sea conexo
+                # con este algoritmo heurístico
+                last_con_line = None
+                while True:
+                    p0,p1,cor0,cor1 = corr2.closest_points(projections)
+                    if not (any(cor0) and any(cor1)):
+                        break
+                    con_line = cor0 + cor1
+                    if last_con_line is not None and last_con_line == con_line:
+                        break
+                    else:
+                        last_con_line = con_line
+                    _, cluster1 = two_means(con_line,max_size=self.proj_size)
+                    if len(cluster1) <= 1:
+                        continue
+                    pts_proj, projected = self.project(points, con_line, cluster1)
+                    qhull = func(self, pts_proj, *args, **kwargs)
+                    # Extendemos a la dimensión original
+                    qhull.extend(con_line, cluster1)
+                    # Agregamos las facetas que ya calculamos
+                    qhull.union(facets)
+                    facets = qhull.facets
+                    # Actualizamos la matriz poniendo en 0 los valores usados
+                    corr2.update(p0, cluster1)
+                    corr2.update(p1, cluster1)
         return qhull
     return do_projection
 
@@ -110,14 +147,19 @@ class PacH(object):
         # Projection configuration
         # If proj_size is None, do not do projection
         self.proj_size = proj_size
-        self.proj_connected = proj_connected
+# This is not working at the moment
+        self.proj_connected = proj_connected and False
 
     def parse(self):
         if self.verbose:
             print 'Starting parse\n'
             start_time = time.time()
-        parser = XesParser(self.filename)
+        if self.filename.endswith('.xes'):
+            parser = XesParser(self.filename)
+        elif self.filename.endswith('.txt'):
+            parser = AdHocParser(self.filename)
         parser.parikhs_vector()
+        self.event_dictionary = rotate_dict(parser.event_dictionary)
         self.pv_traces = parser.pv_traces
         self.pv_set = parser.pv_set
         self.pv_array = parser.pv_array
@@ -136,6 +178,12 @@ class PacH(object):
         return points
 
     def project(self, points, eigen, cluster):
+        """
+            Project the points into the cluster
+            given by the value of the points
+            in the eigen vector
+            returns the projection and the list of projected points indexes
+        """
         max_size = self.samp_size or len(cluster)
         ret = []
         # Por cada variable en el cluster
@@ -144,14 +192,19 @@ class PacH(object):
         # Los voy recorriendo en "orden de correlación"
         cluster.sort(key=lambda x: abs(x), reverse=True)
         positions = get_positions(eigen, cluster)
+        # Cuando queremos conectar las proyecciones pasamos una union
+        # de dos eigenvectors, por lo que necesitamos el moulo dim
+        # para obtener la pos correcta
         # Nos limitamos al máximo numero de elementos en un cluster
         positions = positions[0:max_size]
         for point in points:
             proj_point = []
-            for pos in positions:
+            for idx,pos in enumerate(positions):
+                pos = pos % self.dim
                 proj_point.append(point[pos])
-            ret.append(proj_point)
-        return map(tuple,ret)
+                positions[idx] = pos
+            ret.append(tuple(proj_point))
+        return (list(set(ret)),positions)
 
 
     @property
@@ -207,12 +260,13 @@ class PacH(object):
         self.model()
 
     def generate_pnml(self, filename=None):
-        # Tomo el archivo de entrada y le quito la extensión '.xes' si la tiene
-        def_name = (self.filename.endswith('.xes') and self.filename[:-4])\
-                or self.filename or ''
-        # Genero un nombre por default
-        def_name = '%s-out.pnml'%(def_name)
-        filename = filename or def_name
+        if not filename:
+            # Tomo el archivo de entrada y le quito la extensión '.xes' si la tiene
+            def_name = (self.filename.endswith('.xes') and self.filename[:-4])\
+                    or self.filename or ''
+            # Genero un nombre por default
+            def_name = '%s-out.pnml'%(def_name)
+            filename = def_name
         preamble = '<?xml version="1.0" encoding="UTF-8"?>\n'\
                    '<pnml xmlns="http://www.pnml.org/version-2009/grammar/pnml">\n'\
                    '  <net id="exit_net" type="http://www.pnml.org/version-2009/grammar/ptnet">\n'\
@@ -242,9 +296,9 @@ class PacH(object):
         transitions_list = []
         for idx in xrange(self.dim):
             # Contamos desde uno
-            idx += 1
-            transition_id = 'trans-%04d'%idx
-            transition_name = 'Transition %04d'%idx
+            transition_id = 'trans-%04d'%(idx+1)
+            transition_name = self.event_dictionary.get(idx,
+                    'Transition %04d'%(idx+1))
             transitions_list.append(
                     '      <transition id="%s">\n'\
                     '        <name>\n'\
@@ -311,8 +365,8 @@ def main():
             if '--debug' in sys.argv:
                 pdb.set_trace()
             filename = sys.argv[1]
-            if not filename.endswith('.xes'):
-                print filename, ' does not end in .xes. It should...'
+            if not (filename.endswith('.xes') or filename.endswith('.txt')):
+                print filename, ' does not end in .xes not .txt. It should...'
                 raise Exception('Filename does not end in .xes')
             if not isfile(filename):
                 raise Exception("El archivo especificado no existe")
@@ -330,7 +384,7 @@ def main():
                 except:
                     pass
             proj_size = None
-            proj_connected = True
+            proj_connected = False
             if '--projection' in sys.argv or '-p' in sys.argv:
                 # None indicates not to do projection.
                 # False indicates no limit
@@ -350,7 +404,15 @@ def main():
                     samp_num=samp_num, samp_size=samp_size,
                     proj_size=proj_size, proj_connected=proj_connected)
             pach.pach()
-            pach.generate_pnml()
+            filename = None
+            if '--output' in sys.argv or '-o' in sys.argv:
+                file_idx = '-o' in sys.argv and sys.argv.index('-o') or\
+                    sys.argv.index('--output')
+                try:
+                    filename = sys.argv[file_idx+1]
+                except:
+                    pass
+            pach.generate_pnml(filename=filename)
         except Exception, err:
             ret = 1
             if hasattr(err, 'message'):

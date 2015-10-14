@@ -110,9 +110,37 @@ class XesParser(object):
                     len(self.pv_set), self.dim)
         return True
 
+class AdHocParser(XesParser):
+    def _parse(self):
+        """
+            parse txt file given as argument,
+            returning a dict of trace (as list of char), and the lenght of it
+                the maximum lenght in between all traces
+                the (first) trace where this maximum is reached
+        """
+        with open(self.filename,'r') as ffile:
+            # Iteramos sobre todas las trazas
+            for idx, trace in enumerate(ffile.readlines()):
+                # Iteramos sobre todos los eventos de la traza
+                trace = trace.replace('  ',' ')
+                trace = trace.strip()
+                trace = trace.replace('\n','')
+                for event_idx, value in enumerate(trace.split(' ')):
+                    # Buscamos la lista de puntos de la traza
+                    tr_val = self.traces.setdefault(idx,{'trace': [], 'length': 0,})
+                    if value not in self.event_dictionary:
+                        self.event_dictionary[value] = len(self.event_dictionary)
+                    tr_val['trace'].append(value)
+                    tr_val['length'] += 1
+                    if tr_val['length'] > self.max_len:
+                        self.max_len = tr_val['length']
+                        self.max_len_idx = idx
+        self.dim = len(self.event_dictionary)
+        return True
+
 def main():
     usage = """
-        Usage: ./parser.py <XES filename> [--verbose][--debug]
+        Usage: ./parser.py <LOG filename> [--verbose][--debug]
     """
     if not check_argv(sys.argv, minimum=1, maximum=4):
         print usage
@@ -123,12 +151,15 @@ def main():
             if '--debug' in sys.argv:
                 pdb.set_trace()
             filename = sys.argv[1]
-            if not filename.endswith('.xes'):
-                print filename, ' does not end in .xes. It should...'
-                raise Exception('Filename does not end in .xes')
+            if not (filename.endswith('.xes') or filename.endswith('.txt')):
+                print filename, ' does not end in .xes nor .txt. It should...'
+                raise Exception('Filename has wrong extension')
             if not isfile(filename):
                 raise Exception("El archivo especificado no existe")
-            obj = XesParser(filename, verbose='--verbose' in sys.argv)
+            if filename.endswith('.xes'):
+                obj = XesParser(filename, verbose='--verbose' in sys.argv)
+            elif filename.endswith('.txt'):
+                obj = AdHocParser(filename, verbose='--verbose' in sys.argv)
             obj.parse()
             if '--verbose' in sys.argv:
                 print 'Parse done. Calcuting Parikhs vector'

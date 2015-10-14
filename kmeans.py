@@ -39,11 +39,16 @@ def find_centers(X, K, oldmu=None, mu=None):
         mu = reevaluate_centers(oldmu, clusters)
     return(mu, clusters)
 
-def two_means(points):
+def two_means(points,max_size=None):
     # El algoritmo de kmeans espera un arreglo de NumPy arrays
-    # El centroide inicial y el máximo hasta que CORR (o los eigenvectors en realidad)
-    # esté bien. Luego puede usarse [0,1]
-    clusters = cluster_points(points,[0,max(points)])
+    # El centroide inicial y el máximo
+    clusters = cluster_points(points,[min(points),max(points)])
     if len(clusters) == 0:
         raise CannotGetClusters()
-    return clusters.get(0,[]), clusters.get(1,[])
+    clu0 = clusters.get(0,[])
+    clu1 = clusters.get(1,[])
+    if max_size and len(clu1) > max_size:
+        clu1.sort()
+        clu0 = clu0 + clu1[:len(clu1)-max_size]
+        clu1 = clu1[len(clu1)-max_size:]
+    return clu0, clu1
