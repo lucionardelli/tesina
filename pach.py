@@ -274,9 +274,13 @@ class PacH(object):
                    '      <text>"%s" Generater automagically with PacH</text>\n'\
                    '    </name>\n'\
                    '    <page id="page">\n'%(self.filename)
+
+        # Comenzamos con los Places (i.e. un place por cada inecuación)
+        nbr_places = 0
         places = '\n      <!-- Places -->\n'
         places_list = []
         for idx, place in enumerate(self.facets):
+            nbr_places += 1
             # Contamos desde uno
             idx += 1
             place_id = "place-%04d"%idx
@@ -292,9 +296,13 @@ class PacH(object):
                     '      </place>'%(place_id,place_name,abs(place.offset)))
         places += '\n'.join(places_list)
 
+        # Seguimos con las Transitions (i.e. una transition por cada variable)
+        # Se crearán tantas transiciones como dimensiones del espacio
+        nbr_transitions = 0
         transitions = '\n      <!-- Transitions -->\n'
         transitions_list = []
         for idx in xrange(self.dim):
+            nbr_transitions += 1
             # Contamos desde uno
             transition_id = 'trans-%04d'%(idx+1)
             transition_name = self.event_dictionary.get(idx,
@@ -307,7 +315,19 @@ class PacH(object):
                     '      </transition>\n'%(transition_id,transition_name))
         transitions += '\n'.join(transitions_list)
 
+        # Los arcos se arman relacionando los places con las transitions
+        # Para cada inecuación, se crean un arco hacia la transition
+        # (i.e. variable) con peso igual al TI que la acompaña
+        # Salvo que sea 0, claro.
         arcs = '\n      <!-- Arcs -->\n'
+
+        # Para las transiciones que no tienen
+        # al menos un elemento en el preset y uno en el postset
+        # (i.e un arco que venga de una place y otra que salga haci otro place)
+        # le creamos un place ficticio para ponerlo en su pre y/o post
+        preset = set(range(1,self.dim+1))
+        postset = set(range(1,self.dim+1))
+
         arcs_list = []
         seen_arcs = []
         for pl_id,place in enumerate(self.facets):
@@ -327,25 +347,77 @@ class PacH(object):
                 else:
                     arc_value = ''
                 if val > 0:
+                    if pl_id in preset:
+                        # Puede que ya le hayamos creado un arco
+                        # entrante
+                        preset.remove(pl_id)
                     arc_id = 'arc-P%04d-T%04d'%(pl_id,tr_id)
                     # El arco sale de un place y va hacia una transition
                     from_id = place_id
                     to_id = transition_id
                 else:
+                    if pl_id in postset:
+                        # Puede que ya le hayamos creado un arco
+                        # entrante
+                        postset.remove(pl_id)
                     arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
                     from_id = transition_id
                     to_id = place_id
-                # Evitemos crear arcos repetidos crear arcos repetidos
+                # No debería pasar, pero por las dudas,
+                # evitemos crear arcos repetidos
                 if (from_id, to_id) in seen_arcs:
+                    print 'El arco está repetido!: ', from_id, to_id
                     continue
                 else:
                     seen_arcs.append((from_id, to_id))
                 arcs_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
                                         %(arc_id,from_id,to_id,arc_value))
+
         arcs += '\n'.join(arcs_list)
+
+        # Generamos los places y arcos para los bucles de las transitions
+        # desconectadas
+        loops_list = []
+        for idx,tr_id in enumerate(preset | postset):
+            pl_id = nbr_places + idx + 1
+            place_id = "place-%04d"%(pl_id)
+            place_name = 'Dummy place %04d'%(idx+1)
+
+            # TODO Hay que poner markings en este place??
+            place_value = 0
+
+            loops_list.append(
+                    '      <place id="%s">\n'\
+                    '        <name>\n'\
+                    '          <text>%s</text>\n'\
+                    '        </name>\n'\
+                    '        <initialMarking>\n'\
+                    '          <text>%d</text>\n'\
+                    '        </initialMarking>\n'\
+                    '      </place>'%(place_id,place_name,place_value))
+
+            transition_id = 'trans-%04d'%(tr_id)
+            if tr_id in preset:
+                # Lo agregamos al preset de la transición
+                arc_id = 'arc-P%04d-T%04d'%(pl_id,tr_id)
+                loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
+                                                %(arc_id,transition_id,place_id,1))
+            if tr_id in postset:
+                # Lo agregamos al postset de la transición
+                arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
+                loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
+                                                %(arc_id,place_id,transition_id,1))
+
+        if len(loops_list) == 0:
+            loops = ''
+        else:
+            loops = '\n      <!-- Dummy Places -->\n'
+            loops += '\n'.join(loops_list)
+
+        # Finalizamos el archivo
         ending = '\n    </page>\n  </net>\n</pnml>\n'
 
-        pnml = preamble + places + transitions + arcs + ending
+        pnml = preamble + places + transitions + arcs + loops + ending
         with open(filename,'w') as ffile:
             ffile.write(pnml)
         return True
