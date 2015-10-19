@@ -12,122 +12,8 @@ from random import sample
 
 from halfspace import Halfspace
 from custom_exceptions import CannotGetHull, WrongDimension, CannotIntegerify
-from kmeans import two_means
-def sampling(func):
-    def do_sampling(self, points, *args, **kwargs):
-        seen_points = set()
-        facets = []
-        for _ in xrange(self.samp_num):
-            # When sampling, it can be the case that the calculated
-            # sample is insuficient to calculate MCH, so try a few
-            # times before actually raising error
-            tries = 3 if self.samp_size else 1
-            while tries:
-                try:
-                    points = self.get_sample()
-                    seen_points |= points
-                    qhull = func(self, points, *args, **kwargs)
-                    # Agregamos las facetas que ya calculamos
-                    qhull.union(facets)
-                    # Los puntos no considerados restringen las facetas
-                    for outsider in self.pv_set - seen_points:
-                        qhull.restrict_to(outsider)
-                    facets = qhull.facets
-                    tries = 0
-                except CannotIntegerify, err:
-                    raise err
-                except (CannotGetHull,WrongDimension), err:
-                    tries -= 1
-                    if tries == 0:
-                        print 'Cannot get MCH. Maybe doing *TOO*'\
-                                ' small sampling'
-                        raise err
-        return qhull
-    return do_sampling
-
-def projection(func):
-    def do_projection(self, points, *args, **kwargs):
-        # Calculamos la matrix de correlaciones
-        points = np.array(list(points))
-        if self.proj_size is None:
-            # Si el máximo es None es porque no se desea hacer projection
-            qhull = func(self, points, *args, **kwargs)
-        else:
-            # Hacemos projection
-            corr = CorrMatrix(points)
-            corr2 = corr.copy()
-            facets = []
-            qhull = None
-            projections = {}
-            proj_count = 0
-            while True:
-                proj_count += 1
-                # Hacemos una lista de pares (valor, posicion)
-                tup = [(abs(y),x) for x,y in enumerate(corr.eigenvalues)]
-                # la ordenamos ascendentemente por el valor
-                # y la iteramos (solo nos interesan los índices ordenadamente)
-                tup.sort(reverse=True)
-                # Si 'tup' no tiene al menos un elemento algo anduvo mal...
-                # es como si no tuviesemos eigen-valores en la matriz
-                # Tomamos el eigenvector correspondiente al mayor eigenvalor
-                # ya que se espera que sea el que más info tiene sobre
-                # correlaciones
-                _,idx = tup[0]
-                eigen = corr.eigenvector[:,idx]
-                # tomamos la fila correspondiente al líder
-                # (más grande en valor absoluto)
-                # en la matriz de correlación
-                eigen_abs = map(abs,eigen)
-                leader = eigen_abs.index(max(eigen_abs))
-                leader_row = corr.matrix[leader]
-                #solo utilizamos el cluster de mayor correlación
-                _, cluster1 = two_means(leader_row,max_size=self.proj_size)
-                if len(cluster1) <= 1:
-                    if qhull is not None:
-                        break
-                    else:
-                        # Aunque la proyección sea mala,
-                        # tenemos que hacer al menos una.
-                        cluster0,cluster1 = two_means(leader_row)
-                        cluster1.append(max(cluster0))
-                pts_proj, projected = self.project(points, leader_row, cluster1)
-                projections[proj_count] = projected
-                qhull = func(self, pts_proj, *args, **kwargs)
-                # Extendemos a la dimensión original
-                qhull.extend(leader_row, cluster1)
-                # Agregamos las facetas que ya calculamos
-                qhull.union(facets)
-                facets = qhull.facets
-                # Actualizamos la matriz poniendo en 0 los valores usados
-                corr.update(leader, cluster1)
-            if self.proj_connected:
-                # Intentamos hacer que el modelo sea conexo
-                # con este algoritmo heurístico
-                last_con_line = None
-                while True:
-                    p0,p1,cor0,cor1 = corr2.closest_points(projections)
-                    if not (any(cor0) and any(cor1)):
-                        break
-                    con_line = cor0 + cor1
-                    if last_con_line is not None and last_con_line == con_line:
-                        break
-                    else:
-                        last_con_line = con_line
-                    _, cluster1 = two_means(con_line,max_size=self.proj_size)
-                    if len(cluster1) <= 1:
-                        continue
-                    pts_proj, projected = self.project(points, con_line, cluster1)
-                    qhull = func(self, pts_proj, *args, **kwargs)
-                    # Extendemos a la dimensión original
-                    qhull.extend(con_line, cluster1)
-                    # Agregamos las facetas que ya calculamos
-                    qhull.union(facets)
-                    facets = qhull.facets
-                    # Actualizamos la matriz poniendo en 0 los valores usados
-                    corr2.update(p0, cluster1)
-                    corr2.update(p1, cluster1)
-        return qhull
-    return do_projection
+from sampling import sampling
+from projection import projection
 
 class PacH(object):
 
@@ -229,10 +115,12 @@ class PacH(object):
         if self.verbose:
             print 'Starting modeling\n'
             start_time = time.time()
+        # The actual work is done when accesing self.facets
+        facets = self.facets
         if self.verbose:
-            print "Ended with MCH with ",len(self.facets)," halfspaces"
+            print "Ended with MCH with ",len(facets)," halfspaces"
             print 'This are them:\n'
-            for facet in self.facets:print facet
+            for facet in facets:print facet
         if self.verbose:
             elapsed_time = time.time() - start_time
             print 'Modeling done\n'
@@ -323,10 +211,10 @@ class PacH(object):
 
         # Para las transiciones que no tienen
         # al menos un elemento en el preset y uno en el postset
-        # (i.e un arco que venga de una place y otra que salga haci otro place)
+        # (i.e un arco que venga de una place y otra que salga hacia otro place)
         # le creamos un place ficticio para ponerlo en su pre y/o post
-        preset = set(range(1,self.dim+1))
-        postset = set(range(1,self.dim+1))
+        needs_preset = set(range(1,self.dim+1))
+        needs_postset = set(range(1,self.dim+1))
 
         arcs_list = []
         seen_arcs = []
@@ -347,19 +235,19 @@ class PacH(object):
                 else:
                     arc_value = ''
                 if val > 0:
-                    if pl_id in preset:
+                    if pl_id in needs_preset:
                         # Puede que ya le hayamos creado un arco
                         # entrante
-                        preset.remove(pl_id)
+                        needs_preset.remove(pl_id)
                     arc_id = 'arc-P%04d-T%04d'%(pl_id,tr_id)
                     # El arco sale de un place y va hacia una transition
                     from_id = place_id
                     to_id = transition_id
                 else:
-                    if pl_id in postset:
+                    if pl_id in needs_postset:
                         # Puede que ya le hayamos creado un arco
-                        # entrante
-                        postset.remove(pl_id)
+                        # saliente
+                        needs_postset.remove(pl_id)
                     arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
                     from_id = transition_id
                     to_id = place_id
@@ -378,13 +266,17 @@ class PacH(object):
         # Generamos los places y arcos para los bucles de las transitions
         # desconectadas
         loops_list = []
-        for idx,tr_id in enumerate(preset | postset):
+        for idx,tr_id in enumerate(needs_preset | needs_postset):
             pl_id = nbr_places + idx + 1
             place_id = "place-%04d"%(pl_id)
             place_name = 'Dummy place %04d'%(idx+1)
 
-            # TODO Hay que poner markings en este place??
-            place_value = 0
+            if tr_id in needs_preset:
+                place_value = 1
+            elif tr_id in needs_postset:
+                place_value = 0
+            else
+                raise Exception('No necesita pre ni post!')
 
             loops_list.append(
                     '      <place id="%s">\n'\
@@ -397,17 +289,21 @@ class PacH(object):
                     '      </place>'%(place_id,place_name,place_value))
 
             transition_id = 'trans-%04d'%(tr_id)
-            if tr_id in preset:
-                # Lo agregamos al preset de la transición
+            if tr_id in needs_preset:
+                # Si necesita preset, nos indica que la transición se puede
+                # disparar siempre, por lo que generamos un loop
+                # con el dummy-place
                 arc_id = 'arc-P%04d-T%04d'%(pl_id,tr_id)
                 loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
                                                 %(arc_id,transition_id,place_id,1))
-            if tr_id in postset:
-                # Lo agregamos al postset de la transición
+                arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
+                loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
+            elif tr_id in needs_postset:
+                # Lo agregamos al postset de la transición como una
+                # especie de "/dev/null" donde tirar los markings generados
                 arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
                 loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
                                                 %(arc_id,place_id,transition_id,1))
-
         if len(loops_list) == 0:
             loops = ''
         else:
