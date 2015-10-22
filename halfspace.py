@@ -18,6 +18,12 @@ import numpy as np
 from utils import almost_equal, gcd
 from rationals import integer_coeff
 
+try:
+    import z3
+except:
+    #No module named z3, whouldn't be available
+    pass
+
 class Halfspace(Halfspace):
     """
     A halfspace defined by dot(normal, coords) + offset <= 0
@@ -130,3 +136,92 @@ class Halfspace(Halfspace):
             self.offset = int(self.offset)
             self.normal = map(int,self.normal)
 
+    # Support for Z3 SMT-Solver
+    def smt_solution(self, timeout):
+        solver = z3.Solver()
+        solver.set("soft_timeout", timeout)
+
+        b = self.offset
+        z3_b = z3.Int("b")
+
+        if b > 0:
+            solver.add(z3_b >= 0)
+            solver.add(z3_b <= b)
+        elif b < 0:
+            solver.add(z3_b <= 0)
+            solver.add(z3_b >= b)
+        else:
+            solver.add(z3_b == 0)
+
+        pos_x = True
+        simple = sum(abs(x) for x in self.normal) < 1
+        non_trivial = False
+
+        if not simple:
+            some_consume = False
+            some_produce = False
+
+        diff_sol = z3_b != b
+        h1 = b
+        h2 = z3_b
+        variables = []
+
+        for t_id, val in enumerate(self.normal):
+            z3_val = z3.Int("a" + str(t_id))
+            x = z3.Int("x" + str(t_id))
+            variables.append(x)
+            pos_x = z3.And(pos_x, x >= 0)
+
+            if val > 0:
+                solver.add(0 <= z3_val)
+                solver.add(z3_val <= val)
+            elif val < 0:
+                solver.add(z3_val <= 0)
+                solver.add(val <= z3_val)
+            else:
+                solver.add(z3_val == 0)
+
+            if not simple:
+                some_consume = z3.Or(some_consume, z3_val < 0)
+                some_produce = z3.Or(some_produce, z3_val > 0)
+
+            non_trivial = z3.Or(non_trivial, z3_val != 0)
+            diff_sol = z3.Or(diff_sol, z3_val != val)
+            h1 = h1 + val * x
+            h2 = h2 + z3_val * x
+
+        if not simple:
+            solver.add(z3.simplify(some_consume))
+            solver.add(z3.simplify(some_produce))
+
+        solver.add(z3.simplify(non_trivial))
+        solver.add(z3.simplify(diff_sol))
+        solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, h1 <= 0), h2 <= 0))))
+
+        sol = solver.check()
+        if sol == z3.unsat or sol == z3.unknown:
+            return False
+        else:
+            return solver.model()
+
+    def simplify(self, sol):
+        normal = []
+        if sol != False:
+            offset = int(str(sol[z3.Int("b")]))
+
+            for t_id, val in enumerate(self.normal):
+                z3_val = z3.Int("a" + str(t_id))
+                normal.append(int(str(sol[z3_val])))
+            if sum(abs(x) for x in normal) != 0:
+                return Halfspace(normal, offset, False)
+            else:
+                return self
+        else:
+            return self
+
+    def op_simplify(self):
+        sol = self.smt_solution()
+        while sol != False:
+            self = self.simplify(sol)
+            sol = self.smt_solution()
+        return self

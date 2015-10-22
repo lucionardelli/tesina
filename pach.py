@@ -15,16 +15,38 @@ from custom_exceptions import CannotGetHull, WrongDimension, CannotIntegerify
 from sampling import sampling
 from projection import projection
 
+try:
+    import z3
+except:
+    #No module named z3, whouldn't be available
+    pass
+
 class PacH(object):
 
     def __init__(self, filename, verbose=False,
             samp_num=1, samp_size=None,
-            proj_size=None, proj_connected=True):
+            proj_size=None, proj_connected=True,
+            nfilename=None,
+            SMTtimeout=0):
+        # El archivo de trazas
         self.filename = filename
+        # El archivo de trazas negativas (if any)
+        self.nfilename = nfilename
+        # Inicialización de varibales
         self.dim = 0
+        self.SMTtimeout = SMTtimeout
+        # Referentes a las trazas
         self.pv_traces = []
+        self.pv_set = set()
+        self.pv_array = np.array([])
         self._qhull = None
         self._facets = []
+        # Referentes a las trazas negativas
+        self.npv_traces = []
+        self.npv_set = set()
+        self.npv_array = np.array([])
+        self._nqhull = None
+        self._nfacets = []
         self.verbose = verbose
         # Sampling configuration
         # At least we need one "sample"
@@ -33,8 +55,26 @@ class PacH(object):
         # Projection configuration
         # If proj_size is None, do not do projection
         self.proj_size = proj_size
-# This is not working at the moment
+        # NOTE This is not working at the moment so keep it as False
         self.proj_connected = proj_connected and False
+
+    def parse_negatives(self):
+        if self.verbose:
+            print 'Starting parse of negative traces\n'
+            start_time = time.time()
+        if self.nfilename.endswith('.xes'):
+            parser = XesParser(self.nfilename)
+        elif self.filename.endswith('.txt'):
+            parser = AdHocParser(self.nfilename)
+        parser.parikhs_vector()
+        self.npv_traces = parser.pv_traces
+        self.npv_set = parser.pv_set
+        self.npv_array = parser.pv_array
+        if self.verbose:
+            print 'Parse of negative traces done\n'
+            elapsed_time = time.time() - start_time
+            print '# RESULTADO  obtenido en: ', elapsed_time
+            print '#'*40+'\n'
 
     def parse(self):
         if self.verbose:
@@ -103,6 +143,24 @@ class PacH(object):
         self._facets =  self._facets or self.qhull.facets
         return self._facets
 
+    @property
+    def qhull(self):
+        self._nqhull = self._nqhull or self.get_nqhull(self.npv_array)
+        return self._nqhull
+
+    @property
+    def nfacets(self):
+        self._nfacets =  self._nfacets or self.nqhull.facets
+        return self._nfacets
+
+    @sampling
+    @projection
+    def get_nqhull(self, points):
+        points = set(map(tuple, points))
+        qhull = Qhull(points) # We'll hande the vebose ourselves
+        qhull.compute_hiperspaces()
+        return qhull
+
     @sampling
     @projection
     def get_qhull(self, points):
@@ -110,6 +168,12 @@ class PacH(object):
         qhull = Qhull(points) # We'll hande the vebose ourselves
         qhull.compute_hiperspaces()
         return qhull
+
+    def restrict(self):
+        if not self.nfilename:
+            raise Exception('No se ha especificado un archivo '\
+                    'de trazas negativas!')
+        self.qhull = self.qhull.union(self.nfacets)
 
     def model(self, points=None):
         if self.verbose:
@@ -275,7 +339,7 @@ class PacH(object):
                 place_value = 1
             elif tr_id in needs_postset:
                 place_value = 0
-            else
+            else:
                 raise Exception('No necesita pre ni post!')
 
             loops_list.append(
@@ -298,6 +362,7 @@ class PacH(object):
                                                 %(arc_id,transition_id,place_id,1))
                 arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
                 loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
+                                                %(arc_id,place_id,transition_id,1))
             elif tr_id in needs_postset:
                 # Lo agregamos al postset de la transición como una
                 # especie de "/dev/null" donde tirar los markings generados
@@ -318,11 +383,121 @@ class PacH(object):
             ffile.write(pnml)
         return True
 
+    # Support for Z3 SMT-Solver
+    def smt_solution(self):
+        solver = z3.Solver()
+        solver.set("soft_timeout", self.SMTtimeout)
+
+        diff_sol = False
+        non_trivial = False
+        A1 = True
+        A2 = True
+
+        for p_id, place in enumerate(self._facets):
+
+            b = place.offset
+            z3_b = z3.Int("b" + str(p_id))
+
+            if b > 0:
+                solver.add(z3_b >= 0)
+                solver.add(z3_b <= b)
+            elif b< 0:
+                solver.add(z3_b <= 0)
+                solver.add(z3_b >= b)
+            else:
+                solver.add(z3_b == 0)
+
+            pos_x = True
+
+            simple = sum(abs(x) for x in place.normal) <= 1
+            diff_sig = reduce(lambda x,y:x*y, [x + 1 for x in place.normal]) < 1
+
+            if not simple and diff_sig:
+                some_produce = False
+                some_consume = False
+
+            h1 = b
+            h2 = z3_b
+            variables = []
+
+            for t_id, val in enumerate(place.normal):
+
+                z3_val = z3.Int("a" + str(p_id) + "," + str(t_id))
+                x = z3.Int("x" + str(t_id))
+                variables.append(x)
+                pos_x = z3.And(pos_x, x >= 0)
+
+                if val != 0:
+
+                    if val > 0:
+                        solver.add(0 <= z3_val)
+                        solver.add(z3_val <= val)
+                    elif val < 0:
+                        solver.add(val <= z3_val)
+                        solver.add(z3_val <= 0)
+
+                    if not simple and diff_sig:
+                        some_consume = z3.Or(some_consume, z3_val < 0)
+                        some_produce = z3.Or(some_produce, z3_val > 0)
+
+                    non_trivial = z3.Or(non_trivial, z3_val != 0)
+                    diff_sol = z3.Or(diff_sol, z3_val != val)
+                    h1 = h1 + val * x
+                    h2 = h2 + z3_val * x
+
+                else:
+                    solver.add(z3_val == 0)
+
+            if not simple and diff_sig:
+                solver.add(z3.simplify(some_consume))
+                solver.add(z3.simplify(some_produce))
+
+            A1 = z3.And(A1, h1 <= 0)
+            A2 = z3.And(A2, h2 <= 0)
+
+        solver.add(z3.simplify(non_trivial))
+        solver.add(z3.simplify(diff_sol))
+        solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, A1), A2))))
+
+        sol = solver.check()
+        if sol == z3.unsat or sol == z3.unknown:
+            return False
+        else:
+            return solver.model()
+
+    def simplify(self, sol):
+        facets = []
+        if not sol:
+            for p_id, place in enumerate(self._facets):
+                normal = []
+                b = int(str(sol[z3.Int("b" + str(p_id))]))
+
+                for t_id, val in enumerate(place.normal):
+                    z3_val = z3.Int("a" + str(p_id) + "," + str(t_id))
+                    normal.append(int(str(sol[z3_val])))
+                if sum(abs(x) for x in normal) != 0:
+                    f = Halfspace(normal, b, False)
+                    if not f in facets:
+                        facets.append(f)
+
+            self._facets = facets
+            return self
+        else:
+            return self
+
+    def op_simplify(self):
+        sol = self.smt_solution()
+        while sol != False:
+            self = self.simplify(sol)
+            sol = self.smt_solution()
+        return self
 
 def main():
-    usage = 'Usage: ./pach <XES filename> [--debug][--verbose]'\
-        ' [--sampling [<number of samplings>] [<sampling size>]]'\
-        ' [--projection [<max group size>] [<connected model>]]'
+    usage = 'Usage: ./pach <LOG filename> [--debug][--verbose]'\
+        '\n\t[--negative <Negative points filename>] ]'\
+        '\n\t[--sampling [<number of samplings>] [<sampling size>]]'\
+        '\n\t[--projection [<max group size>] [<connected model>]]'\
+        '\n\t[--smt-timeout <timeout>]'
     if not check_argv(sys.argv, minimum=1, maximum=7):
         print usage
         ret = -1
@@ -367,10 +542,29 @@ def main():
                     proj_connected = int(sys.argv[proj_idx+2])
                 except:
                     pass
+            nfilename = None
+            if '--negative' in sys.argv or '-n' in sys.argv:
+                nidx = '-n' in sys.argv and sys.argv.index('-n') or\
+                    sys.argv.index('--negative')
+                nfilename = sys.argv[nidx+1]
+                if not (nfilename.endswith('.xes') or nfilename.endswith('.txt')):
+                    print nfilename, ' does not end in .xes not .txt. It should...'
+                    raise Exception('Filename does not end in .xes')
+                if not isfile(nfilename):
+                    raise Exception("El archivo especificado no existe")
 
+            SMTtimeout = None
+            if '--smt-timeout' in sys.argv or '-smtt' in sys.argv:
+                smtt_idx = '-smtt' in sys.argv and sys.argv.index('-smtt') or\
+                    sys.argv.index('--smt-timeout')
+                try:
+                    SMTtimeout = int(sys.argv[smtt_idx+1])
+                except:
+                    pass
             pach = PacH(filename, verbose=('--verbose' in sys.argv),
                     samp_num=samp_num, samp_size=samp_size,
-                    proj_size=proj_size, proj_connected=proj_connected)
+                    proj_size=proj_size, proj_connected=proj_connected,
+                    nfilename=nfilename,SMTtimeout=SMTtimeout)
             pach.pach()
             filename = None
             if '--output' in sys.argv or '-o' in sys.argv:
