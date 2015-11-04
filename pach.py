@@ -32,9 +32,7 @@ class PacH(object):
         self.filename = filename
         # El archivo de trazas negativas (if any)
         self.nfilename = nfilename
-        # Inicialización de varibales
-        self.dim = 0
-        self.SMTtimeout = SMTtimeout
+        self.verbose = verbose
         # Referentes a las trazas
         self.pv_traces = []
         self.pv_set = set()
@@ -45,9 +43,9 @@ class PacH(object):
         self.npv_traces = []
         self.npv_set = set()
         self.npv_array = np.array([])
-        self._nqhull = None
-        self._nfacets = []
-        self.verbose = verbose
+        # Inicialización de varibales
+        self.dim = 0
+        self.SMTtimeout = SMTtimeout
         # Sampling configuration
         # At least we need one "sample"
         self.samp_num = max(samp_num,1)
@@ -59,6 +57,9 @@ class PacH(object):
         self.proj_connected = proj_connected and False
 
     def parse_negatives(self):
+        if not self.nfilename:
+            raise Exception('No se ha especificado un archivo '\
+                    'de trazas negativas!')
         if self.verbose:
             print 'Starting parse of negative traces\n'
             start_time = time.time()
@@ -66,6 +67,9 @@ class PacH(object):
             parser = XesParser(self.nfilename)
         elif self.filename.endswith('.txt'):
             parser = AdHocParser(self.nfilename)
+        else:
+            raise Exception("Error in file %s extension. Only '.xes' and '.txt'"\
+                    " are allowed!"%(self.nfilename or ''))
         parser.parikhs_vector()
         self.npv_traces = parser.pv_traces
         self.npv_set = parser.pv_set
@@ -76,7 +80,7 @@ class PacH(object):
             print '# RESULTADO  obtenido en: ', elapsed_time
             print '#'*40+'\n'
 
-    def parse(self):
+    def parse_traces(self):
         if self.verbose:
             print 'Starting parse\n'
             start_time = time.time()
@@ -84,6 +88,9 @@ class PacH(object):
             parser = XesParser(self.filename)
         elif self.filename.endswith('.txt'):
             parser = AdHocParser(self.filename)
+        else:
+            raise Exception("Error in file %s extension. Only '.xes' and '.txt'"\
+                    " are allowed!"%(self.filename or ''))
         parser.parikhs_vector()
         self.event_dictionary = rotate_dict(parser.event_dictionary)
         self.pv_traces = parser.pv_traces
@@ -95,6 +102,11 @@ class PacH(object):
             elapsed_time = time.time() - start_time
             print '# RESULTADO  obtenido en: ', elapsed_time
             print '#'*40+'\n'
+
+    def parse(self):
+        self.parse_traces()
+        if self.nfilename:
+            self.parse_negatives()
 
     def get_sample(self):
         points = set()
@@ -132,7 +144,6 @@ class PacH(object):
             ret.append(tuple(proj_point))
         return (list(set(ret)),positions)
 
-
     @property
     def qhull(self):
         self._qhull = self._qhull or self.get_qhull(self.pv_array)
@@ -142,24 +153,6 @@ class PacH(object):
     def facets(self):
         self._facets =  self._facets or self.qhull.facets
         return self._facets
-
-    @property
-    def qhull(self):
-        self._nqhull = self._nqhull or self.get_nqhull(self.npv_array)
-        return self._nqhull
-
-    @property
-    def nfacets(self):
-        self._nfacets =  self._nfacets or self.nqhull.facets
-        return self._nfacets
-
-    @sampling
-    @projection
-    def get_nqhull(self, points):
-        points = set(map(tuple, points))
-        qhull = Qhull(points) # We'll hande the vebose ourselves
-        qhull.compute_hiperspaces()
-        return qhull
 
     @sampling
     @projection
@@ -173,7 +166,9 @@ class PacH(object):
         if not self.nfilename:
             raise Exception('No se ha especificado un archivo '\
                     'de trazas negativas!')
-        self.qhull = self.qhull.union(self.nfacets)
+        if self.verbose:
+            print 'Starting to simplify model from negative points\n'
+            start_time = time.time()
 
     def model(self, points=None):
         if self.verbose:
@@ -217,7 +212,14 @@ class PacH(object):
             def_name = (self.filename.endswith('.xes') and self.filename[:-4])\
                     or self.filename or ''
             # Genero un nombre por default
-            def_name = '%s-out.pnml'%(def_name)
+            opts = ''
+            if self.samp_num > 1:
+                opts += '_s%d'%(self.samp_num)
+                if self.samp_size:
+                    opts += '_%d'%(self.samp_size)
+            if self.proj_size is not None:
+                opts += '_p%d'%(self.proj_size)
+            def_name = '%s.pnml'%(def_name+opts)
             filename = def_name
         preamble = '<?xml version="1.0" encoding="UTF-8"?>\n'\
                    '<pnml xmlns="http://www.pnml.org/version-2009/grammar/pnml">\n'\
@@ -256,9 +258,12 @@ class PacH(object):
         for idx in xrange(self.dim):
             nbr_transitions += 1
             # Contamos desde uno
-            transition_id = 'trans-%04d'%(idx+1)
-            transition_name = self.event_dictionary.get(idx,
-                    'Transition %04d'%(idx+1))
+            if idx in self.event_dictionary:
+                transition_id = self.event_dictionary.get(idx).replace(' ','_')
+                transition_name = self.event_dictionary.get(idx)
+            else:
+                transition_id = 'trans-%04d'%(idx+1)
+                transition_name = 'Transition %04d'%(idx+1)
             transitions_list.append(
                     '      <transition id="%s">\n'\
                     '        <name>\n'\
@@ -421,44 +426,34 @@ class PacH(object):
             variables = []
 
             for t_id, val in enumerate(place.normal):
-
                 z3_val = z3.Int("a" + str(p_id) + "," + str(t_id))
                 x = z3.Int("x" + str(t_id))
                 variables.append(x)
                 pos_x = z3.And(pos_x, x >= 0)
-
-                if val != 0:
-
+                if val:
                     if val > 0:
                         solver.add(0 <= z3_val)
                         solver.add(z3_val <= val)
-                    elif val < 0:
+                    else:
                         solver.add(val <= z3_val)
                         solver.add(z3_val <= 0)
-
                     if not simple and diff_sig:
                         some_consume = z3.Or(some_consume, z3_val < 0)
                         some_produce = z3.Or(some_produce, z3_val > 0)
-
                     non_trivial = z3.Or(non_trivial, z3_val != 0)
                     diff_sol = z3.Or(diff_sol, z3_val != val)
                     h1 = h1 + val * x
                     h2 = h2 + z3_val * x
-
                 else:
                     solver.add(z3_val == 0)
-
             if not simple and diff_sig:
                 solver.add(z3.simplify(some_consume))
                 solver.add(z3.simplify(some_produce))
-
             A1 = z3.And(A1, h1 <= 0)
             A2 = z3.And(A2, h2 <= 0)
-
         solver.add(z3.simplify(non_trivial))
         solver.add(z3.simplify(diff_sol))
         solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, A1), A2))))
-
         sol = solver.check()
         if sol == z3.unsat or sol == z3.unknown:
             return False
@@ -471,7 +466,6 @@ class PacH(object):
             for p_id, place in enumerate(self._facets):
                 normal = []
                 b = int(str(sol[z3.Int("b" + str(p_id))]))
-
                 for t_id, val in enumerate(place.normal):
                     z3_val = z3.Int("a" + str(p_id) + "," + str(t_id))
                     normal.append(int(str(sol[z3_val])))
@@ -479,7 +473,6 @@ class PacH(object):
                     f = Halfspace(normal, b, False)
                     if not f in facets:
                         facets.append(f)
-
             self._facets = facets
             return self
         else:
@@ -498,7 +491,7 @@ def main():
         '\n\t[--sampling [<number of samplings>] [<sampling size>]]'\
         '\n\t[--projection [<max group size>] [<connected model>]]'\
         '\n\t[--smt-timeout <timeout>]'
-    if not check_argv(sys.argv, minimum=1, maximum=7):
+    if not check_argv(sys.argv, minimum=1, maximum=14):
         print usage
         ret = -1
     else:

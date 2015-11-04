@@ -34,7 +34,6 @@ class XesParser(object):
         """
         xs[position] += value
 
-
     def _parse(self):
         """
             parse xes file given as argument,
@@ -166,6 +165,8 @@ def main():
             obj.parse()
             obj.parikhs_vector()
             CorrMatrix(obj.pv_array)
+            print 'Se encontraron {0} puntos en un espacio de dimensión {1}'.format(
+                    len(obj.pv_set), obj.dim)
             if '--verbose' in sys.argv:
                 print "#"*15
         except Exception, err:

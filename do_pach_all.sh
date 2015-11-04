@@ -20,11 +20,12 @@ echo '> Comienza confDimStacked.xes'
 echo ''
 echo '> Comienza Con proyec, sin sampling'
 echo '> Comienza log1.xes'
-./pach.py ../xes_logs/log1.xes --projection
+# Con valores de projection mayor, no anda
+./pach.py ../xes_logs/log1.xes --projection 11
 echo '> Comienza a32.xes'
 ./pach.py ../xes_logs/a32.xes --projection
-echo '> Comienza Angiogenesis-PT-01.xes'
-./pach.py ../xes_logs/Angiogenesis-PT-01.xes --projection
+#echo '> Comienza Angiogenesis-PT-01.xes'
+#./pach.py ../xes_logs/Angiogenesis-PT-01.xes --projection 8 --sampling 3 100
 echo '> Comienza DatabaseWithMutex-PT-02.xes'
 ./pach.py ../xes_logs/DatabaseWithMutex-PT-02.xes --projection
 echo '> Comienza cycles5_2.xes'
