@@ -11,9 +11,7 @@ class Qhull(object):
 
     def __init__(self, points, verbose=False):
         self.points = set(points)
-        self.vertices = set()
         self.__qhull = None
-        self.simplices = []
         self.facets = []
         self.verbose = verbose
 
@@ -35,20 +33,6 @@ class Qhull(object):
         except:
             raise IncorrectOutput()
         return (dim, facets_nbr, facets)
-
-    def compute_vertices(self):
-        self.__qhull = ConvexHull(list(self.points))
-        self.simplices = self.__qhull.simplices
-        self.vertices = self.__qhull.vertices
-        self.dim = self.__qhull.dim
-        if self.verbose:
-            print "Computed MCH with ", len(self.vertices)," points"
-            print 'This are the points:'
-            print(self.vertices)
-            print "Computed MCH with ", len(self.simplices)," simplices"
-            print 'This are them:'
-            print(self.simplices)
-        return len(self.vertices)
 
     def compute_hiperspaces(self):
         output = qconvex('n',list(self.points))
@@ -121,6 +105,31 @@ class Qhull(object):
         positions = get_positions(eigen, cluster)
         self.extend_dimension(len(eigen), positions)
 
+    def can_eliminate(self,candidate, npoint):
+        ret = False
+        for facet in set(self.facets)-set(candidate):
+            if not facet.inside(npoint):
+                ret = True
+                break
+        return ret
+
+    def simplify(self, npoints):
+        facets = list(self.facets)
+        popped = 0
+        for idx,facet in enumerate(self.facets):
+            # Creamos un dummy hull para guardar los facets
+            # menos el que se considera para eliminar
+            tmpqull = Qhull(set())
+            tmpqhull.facets = list(set(facets)-set([facet]))
+            simplify = True
+            for npoint in npoints:
+                if npoint in tmpqull:
+                    simplify = False
+                    break
+            if simplify:
+                facets.pop(idx - popped)
+                popped += 1
+        self.facets = facets
 
 def main():
     usage = 'Usage: ./qhull <points> [--debug][--verbose]'

@@ -50,3 +50,4 @@ echo '> Comienza receipt.xes'
 ./pach.py ../xes_logs/receipt.xes --projection
 echo '> Comienza svn.xes'
 ./pach.py ../xes_logs/svn.xes --projection
+mv ../xes_logs/*.pnml ../pnml/no_smt/

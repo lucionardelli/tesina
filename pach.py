@@ -27,7 +27,9 @@ class PacH(object):
             samp_num=1, samp_size=None,
             proj_size=None, proj_connected=True,
             nfilename=None,
-            SMTtimeout=0):
+            smt_matrix=False,
+            smt_iter=False,
+            smt_timeout=0):
         # El archivo de trazas
         self.filename = filename
         # El archivo de trazas negativas (if any)
@@ -45,7 +47,9 @@ class PacH(object):
         self.npv_array = np.array([])
         # Inicialización de varibales
         self.dim = 0
-        self.SMTtimeout = SMTtimeout
+        self.smt_iter = smt_iter
+        self.smt_matrix = smt_matrix
+        self.smt_timeout = smt_timeout
         # Sampling configuration
         # At least we need one "sample"
         self.samp_num = max(samp_num,1)
@@ -162,13 +166,23 @@ class PacH(object):
         qhull.compute_hiperspaces()
         return qhull
 
-    def restrict(self):
-        if not self.nfilename:
-            raise Exception('No se ha especificado un archivo '\
-                    'de trazas negativas!')
-        if self.verbose:
-            print 'Starting to simplify model from negative points\n'
-            start_time = time.time()
+    def remove_unnecesary(self):
+        if self.nfilename:
+            if self.verbose:
+                print 'Starting to simplify model from negative points\n'
+                start_time = time.time()
+            old_len = len(self.facets)
+            self.qhull.simplify(self.npv_set)
+            removed = len(self.facets) - old_len
+            if self.verbose:
+                elapsed_time = time.time() - start_time
+                print 'Ended simplify from negative points\n'
+                print '# RESULTADO  obtenido en: ', elapsed_time
+                if removed:
+                    print 'We removed %d facets without allowing negative points'
+                else:
+                    print "Couldn't simplify model without adding negative points"
+                print '#'*40+'\n'
 
     def model(self, points=None):
         if self.verbose:
@@ -186,25 +200,10 @@ class PacH(object):
             print '# RESULTADO  obtenido en: ', elapsed_time
             print '#'*40+'\n'
 
-    def point_model(self):
-        if self.verbose:
-            print 'Starting modelling\n'
-            start_time = time.time()
-        self.qhull = Qhull(self.pv_set, verbose=self.verbose)
-        ret = self.qhull.compute()
-        if self.verbose:
-            print 'Modelling done\n'
-            elapsed_time = time.time() - start_time
-            print 'MCH points: {2}\n'\
-                'Diferent parsed points: {0}\n'\
-                'Parsed points dimension: {1}\n'.format(ret, len(self.dim),
-                self.parser.dimension)
-            print '# RESULTADO  obtenido en: ', elapsed_time
-            print '#'*40+'\n'
-
     def pach(self):
         self.parse()
         self.model()
+        self.remove_unnecesary()
 
     def generate_pnml(self, filename=None):
         if not filename:
@@ -391,7 +390,7 @@ class PacH(object):
     # Support for Z3 SMT-Solver
     def smt_solution(self):
         solver = z3.Solver()
-        solver.set("soft_timeout", self.SMTtimeout)
+        solver.set("soft_timeout", self.smt_timeout)
 
         diff_sol = False
         non_trivial = False
@@ -485,13 +484,22 @@ class PacH(object):
             sol = self.smt_solution()
         return self
 
+    def smt_simplify(self):
+        if self.smt_matrix:
+            self.op_simplify()
+        elif self.smt_iter:
+            for facet in self.facets:
+                facet.op_simplify()
+        return True
+
 def main():
     usage = 'Usage: ./pach <LOG filename> [--debug][--verbose]'\
         '\n\t[--negative <Negative points filename>] ]'\
         '\n\t[--sampling [<number of samplings>] [<sampling size>]]'\
         '\n\t[--projection [<max group size>] [<connected model>]]'\
-        '\n\t[--smt-timeout <timeout>]'
-    if not check_argv(sys.argv, minimum=1, maximum=14):
+        '\n\t[--smt-simp [<timeout>]]'\
+        '\n\t[--smt-iter [<timeout>]]'
+    if not check_argv(sys.argv, minimum=1, maximum=15):
         print usage
         ret = -1
     else:
@@ -546,18 +554,32 @@ def main():
                 if not isfile(nfilename):
                     raise Exception("El archivo especificado no existe")
 
-            SMTtimeout = None
-            if '--smt-timeout' in sys.argv or '-smtt' in sys.argv:
-                smtt_idx = '-smtt' in sys.argv and sys.argv.index('-smtt') or\
-                    sys.argv.index('--smt-timeout')
+            smt_matrix = False
+            smt_iter = False
+            smt_timeout = None
+            if '--smt-simp' in sys.argv or '-smt-s' in sys.argv:
+                smt_idx = '-smt-s' in sys.argv and sys.argv.index('-smt-s') or\
+                    sys.argv.index('--smt-simp')
+                smt_matrix = True
                 try:
-                    SMTtimeout = int(sys.argv[smtt_idx+1])
+                    smt_timeout = int(sys.argv[smt_idx+1])
+                except:
+                    pass
+            elif '--smt-iter' in sys.argv or '-smt-s' in sys.argv:
+                smt_idx = '-smt-i' in sys.argv and sys.argv.index('-smt-i') or\
+                    sys.argv.index('--smt-iter')
+                smt_iter = True
+                try:
+                    smt_timeout = int(sys.argv[smt_idx+1])
                 except:
                     pass
             pach = PacH(filename, verbose=('--verbose' in sys.argv),
                     samp_num=samp_num, samp_size=samp_size,
                     proj_size=proj_size, proj_connected=proj_connected,
-                    nfilename=nfilename,SMTtimeout=SMTtimeout)
+                    nfilename=nfilename,
+                    smt_matrix=smt_matrix,
+                    smt_iter=smt_iter,
+                    smt_timeout=smt_timeout)
             pach.pach()
             filename = None
             if '--output' in sys.argv or '-o' in sys.argv:
