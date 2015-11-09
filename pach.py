@@ -291,11 +291,14 @@ class PacH(object):
             pl_id += 1
             place_id = 'place-%04d'%(pl_id)
             for tr_id, val in enumerate(place.normal):
-                tr_id += 1
                 # Si es cero no crear el arco
                 if not val:
                     continue
-                transition_id = 'trans-%04d'%(tr_id)
+
+                if tr_id in self.event_dictionary:
+                    transition_id = self.event_dictionary.get(tr_id).replace(' ','_')
+                else:
+                    transition_id = 'trans-%04d'%(tr_id+1)
                 if abs(val) != 1:
                     arc_value = '<inscription>'\
                             '<text>%s</text>'\
@@ -307,7 +310,7 @@ class PacH(object):
                         # Puede que ya le hayamos creado un arco
                         # entrante
                         needs_preset.remove(pl_id)
-                    arc_id = 'arc-P%04d-T%04d'%(pl_id,tr_id)
+                    arc_id = 'arc-P%04d-T%s'%(pl_id,transition_id)
                     # El arco sale de un place y va hacia una transition
                     from_id = place_id
                     to_id = transition_id
@@ -316,7 +319,7 @@ class PacH(object):
                         # Puede que ya le hayamos creado un arco
                         # saliente
                         needs_postset.remove(pl_id)
-                    arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
+                    arc_id = 'arc-T%s-P%04d'%(transition_id,pl_id)
                     from_id = transition_id
                     to_id = place_id
                 # No debería pasar, pero por las dudas,
@@ -356,21 +359,25 @@ class PacH(object):
                     '        </initialMarking>\n'\
                     '      </place>'%(place_id,place_name,place_value))
 
-            transition_id = 'trans-%04d'%(tr_id)
+
+            if tr_id in self.event_dictionary:
+                transition_id = self.event_dictionary.get(tr_id).replace(' ','_')
+            else:
+                transition_id = 'trans-%04d'%(tr_id)
             if tr_id in needs_preset:
                 # Si necesita preset, nos indica que la transición se puede
                 # disparar siempre, por lo que generamos un loop
                 # con el dummy-place
-                arc_id = 'arc-P%04d-T%04d'%(pl_id,tr_id)
+                arc_id = 'arc-P%04d-T%s'%(pl_id,transition_id)
                 loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
                                                 %(arc_id,transition_id,place_id,1))
-                arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
+                arc_id = 'arc-T%s-P%04d'%(tr_id,pl_id)
                 loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
                                                 %(arc_id,place_id,transition_id,1))
             elif tr_id in needs_postset:
                 # Lo agregamos al postset de la transición como una
                 # especie de "/dev/null" donde tirar los markings generados
-                arc_id = 'arc-T%04d-P%04d'%(tr_id,pl_id)
+                arc_id = 'arc-T%s-P%04d'%(tr_id,pl_id)
                 loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
                                                 %(arc_id,place_id,transition_id,1))
         if len(loops_list) == 0:
