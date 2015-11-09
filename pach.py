@@ -379,7 +379,7 @@ class PacH(object):
                 # especie de "/dev/null" donde tirar los markings generados
                 arc_id = 'arc-T%s-P%04d'%(tr_id,pl_id)
                 loops_list.append('      <arc id="%s" source="%s" target="%s">%s</arc>'
-                                                %(arc_id,place_id,transition_id,1))
+                                                %(arc_id,transition_id,place_id,1))
         if len(loops_list) == 0:
             loops = ''
         else:
