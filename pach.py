@@ -57,8 +57,7 @@ class PacH(object):
         # Projection configuration
         # If proj_size is None, do not do projection
         self.proj_size = proj_size
-        # NOTE This is not working at the moment so keep it as False
-        self.proj_connected = proj_connected and False
+        self.proj_connected = proj_connected
 
     def parse_negatives(self):
         if not self.nfilename:
@@ -134,15 +133,9 @@ class PacH(object):
         # Los voy recorriendo en "orden de correlación"
         cluster.sort(key=lambda x: abs(x), reverse=True)
         positions = get_positions(eigen, cluster)
-        # Cuando queremos conectar las proyecciones pasamos una union
-        # de dos eigenvectors, por lo que necesitamos el moulo dim
-        # para obtener la pos correcta
-        # Nos limitamos al máximo numero de elementos en un cluster
-        positions = positions[0:max_size]
         for point in points:
             proj_point = []
             for idx,pos in enumerate(positions):
-                pos = pos % self.dim
                 proj_point.append(point[pos])
                 positions[idx] = pos
             ret.append(tuple(proj_point))
@@ -232,10 +225,8 @@ class PacH(object):
         nbr_places = 0
         places = '\n      <!-- Places -->\n'
         places_list = []
-        for idx, place in enumerate(self.facets):
+        for idx, place in enumerate(self.facets,1):
             nbr_places += 1
-            # Contamos desde uno
-            idx += 1
             place_id = "place-%04d"%idx
             place_name = ("%s"%(place)).replace('<=','&lt;=')
             places_list.append(
@@ -255,8 +246,6 @@ class PacH(object):
         transitions = '\n      <!-- Transitions -->\n'
         transitions_list = []
         for idx in xrange(self.dim):
-            nbr_transitions += 1
-            # Contamos desde uno
             if idx in self.event_dictionary:
                 transition_id = self.event_dictionary.get(idx).replace(' ','_')
                 transition_name = self.event_dictionary.get(idx)
@@ -281,14 +270,13 @@ class PacH(object):
         # al menos un elemento en el preset y uno en el postset
         # (i.e un arco que venga de una place y otra que salga hacia otro place)
         # le creamos un place ficticio para ponerlo en su pre y/o post
-        needs_preset = set(range(1,self.dim+1))
-        needs_postset = set(range(1,self.dim+1))
+        needs_preset = set(range(self.dim))
+        needs_postset = set(range(self.dim))
 
         arcs_list = []
         seen_arcs = []
-        for pl_id,place in enumerate(self.facets):
+        for pl_id,place in enumerate(self.facets,1):
             # Contamos desde uno
-            pl_id += 1
             place_id = 'place-%04d'%(pl_id)
             for tr_id, val in enumerate(place.normal):
                 # Si es cero no crear el arco
@@ -306,19 +294,19 @@ class PacH(object):
                 else:
                     arc_value = ''
                 if val > 0:
-                    if pl_id in needs_preset:
+                    if tr_id in needs_preset:
                         # Puede que ya le hayamos creado un arco
                         # entrante
-                        needs_preset.remove(pl_id)
+                        needs_preset.remove(tr_id)
                     arc_id = 'arc-P%04d-T%s'%(pl_id,transition_id)
                     # El arco sale de un place y va hacia una transition
                     from_id = place_id
                     to_id = transition_id
                 else:
-                    if pl_id in needs_postset:
+                    if tr_id in needs_postset:
                         # Puede que ya le hayamos creado un arco
                         # saliente
-                        needs_postset.remove(pl_id)
+                        needs_postset.remove(tr_id)
                     arc_id = 'arc-T%s-P%04d'%(transition_id,pl_id)
                     from_id = transition_id
                     to_id = place_id
@@ -513,8 +501,6 @@ def main():
         ret = 0
         try:
             from os.path import isfile
-            if '--debug' in sys.argv:
-                pdb.set_trace()
             filename = sys.argv[1]
             if not (filename.endswith('.xes') or filename.endswith('.txt')):
                 print filename, ' does not end in .xes not .txt. It should...'
@@ -535,7 +521,7 @@ def main():
                 except:
                     pass
             proj_size = None
-            proj_connected = False
+            proj_connected = True
             if '--projection' in sys.argv or '-p' in sys.argv:
                 # None indicates not to do projection.
                 # False indicates no limit
@@ -580,6 +566,8 @@ def main():
                     smt_timeout = int(sys.argv[smt_idx+1])
                 except:
                     pass
+            if '--debug' in sys.argv:
+                pdb.set_trace()
             pach = PacH(filename, verbose=('--verbose' in sys.argv),
                     samp_num=samp_num, samp_size=samp_size,
                     proj_size=proj_size, proj_connected=proj_connected,
