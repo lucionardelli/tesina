@@ -17,6 +17,8 @@ import numpy as np
 
 from utils import almost_equal, gcd
 from rationals import integer_coeff
+from custom_exceptions import WrongDimension
+from config import *
 
 try:
     import z3
@@ -31,8 +33,12 @@ class Halfspace(Halfspace):
     def __init__(self, normal, offset, integer_vals=True):
         super(Halfspace,self).__init__(normal, offset)
         self.dim = len(normal)
+        self.__original_normal = normal
+        self.__original_offset = offset
         if integer_vals:
+            logger.debug('Searching for integer coeficients of HS %s', self)
             self.integerify()
+            logger.debug('Done %s', self)
 
     def __hash__(self):
         return hash(str(self.normal + [self.offset]))
@@ -93,10 +99,10 @@ class Halfspace(Halfspace):
             origin: point to check if is in the hyperplane
         """
         try:
-            eq_res = np.dot(self.normal,point) + self.offset
+            eq_res = np.dot(self.__original_normal,point) + self.__original_offset
         except Exception, err:
             raise WrongDimension()
-        return eq_res < 0.0 or almost_equal(eq_res, 0.0, tolerance=0.0001)
+        return eq_res < 0.0 or almost_equal(eq_res, 0.0, tolerance=TOLERANCE)
 
     def extend_dimension(self, dim, ext_dict):
         """
@@ -105,15 +111,19 @@ class Halfspace(Halfspace):
                       in the new qhull (given in order)
         """
         self.dim = dim
+        original_normal = []
         normal = []
         for axis in xrange(dim):
             if axis in ext_dict:
                 # El eje pertenece a una dimensión "de los viejas"
                 idx = ext_dict.index(axis)
                 normal.append(self.normal[idx])
+                original_normal.append(self.__original_normal[idx])
             else:
+                original_normal.append(0)
                 normal.append(0)
         self.normal = normal
+        self.__original_normal = original_normal
 
     def axis_intersection(self, axis):
         # Buscamos la intersección del hiperespacio con el eje 'axis'
@@ -127,7 +137,6 @@ class Halfspace(Halfspace):
         # buscamos una representación equivalente
         # del hiperespacio a valores enteros
         if any(map(lambda x: not x.is_integer(), self.normal)):
-
             integerified = integer_coeff(self.normal+[self.offset])
 
             self.offset = integerified[-1]

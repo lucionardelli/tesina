@@ -3,9 +3,7 @@
 from qhull import Qhull
 from parser import XesParser, AdHocParser
 from corrmatrix import CorrMatrix
-from utils import (check_argv, almost_equal, my_round,
-                    get_positions, rotate_dict)
-import pdb
+from utils import get_positions, rotate_dict
 import time
 import numpy as np
 from random import sample
@@ -14,6 +12,8 @@ from halfspace import Halfspace
 from custom_exceptions import CannotGetHull, WrongDimension, CannotIntegerify
 from sampling import sampling
 from projection import projection
+
+from config import logger
 
 try:
     import z3
@@ -31,9 +31,11 @@ class PacH(object):
             smt_iter=False,
             smt_timeout=0):
         # El archivo de trazas
+        logger.info('Positive traces file: %s', filename)
         self.filename = filename
         # El archivo de trazas negativas (if any)
         self.nfilename = nfilename
+        logger.info('Negative traces file: %s', nfilename)
         self.verbose = verbose
         # Referentes a las trazas
         self.pv_traces = []
@@ -47,20 +49,38 @@ class PacH(object):
         self.npv_array = np.array([])
         # Inicialización de varibales
         self.dim = 0
+        if smt_iter:
+            logger.info('Will apply iterative SMT simplifications')
         self.smt_iter = smt_iter
+        if smt_matrix:
+            logger.info('Will apply SMT simplification')
         self.smt_matrix = smt_matrix
         self.smt_timeout = smt_timeout
         # Sampling configuration
         # At least we need one "sample"
         self.samp_num = max(samp_num,1)
+        if self.samp_num > 1:
+            logger.info('Will apply %s samples',self.samp_num)
         self.samp_size = samp_size
+        if self.samp_size != 0:
+            logger.info('Samples will have %s points',self.samp_size)
         # Projection configuration
         # If proj_size is None, do not do projection
+        if proj_size is not None:
+            if proj_size:
+                logger.info('Will apply projections of no more of %s points',
+                        proj_size)
+            else:
+                logger.info('Will apply unbonded projections')
         self.proj_size = proj_size
+        if proj_connected:
+            logger.info('Will try to connect the projections')
         self.proj_connected = proj_connected
 
     def parse_negatives(self):
         if not self.nfilename:
+            logger.error('No se ha especificado un archivo '\
+                    'de trazas negativas!')
             raise Exception('No se ha especificado un archivo '\
                     'de trazas negativas!')
         if self.verbose:
@@ -71,6 +91,8 @@ class PacH(object):
         elif self.filename.endswith('.txt'):
             parser = AdHocParser(self.nfilename)
         else:
+            logger.error("Error in file %s extension. Only '.xes' and '.txt'"\
+                    " are allowed!",(self.nfilename or ''))
             raise Exception("Error in file %s extension. Only '.xes' and '.txt'"\
                     " are allowed!"%(self.nfilename or ''))
         parser.parikhs_vector()
@@ -92,6 +114,8 @@ class PacH(object):
         elif self.filename.endswith('.txt'):
             parser = AdHocParser(self.filename)
         else:
+            logger.error("Error in file %s extension. Only '.xes' and '.txt'"\
+                    " are allowed!",(self.filename or ''))
             raise Exception("Error in file %s extension. Only '.xes' and '.txt'"\
                     " are allowed!"%(self.filename or ''))
         parser.parikhs_vector()
@@ -125,8 +149,7 @@ class PacH(object):
             in the eigen vector
             returns the projection and the list of projected points indexes
         """
-        max_size = self.samp_size or len(cluster)
-        ret = []
+        ret = set()
         # Por cada variable en el cluster
         # busco el valor correspondiente en los puntos iniciales
         # y lo agrego a mi resultado
@@ -134,12 +157,9 @@ class PacH(object):
         cluster.sort(key=lambda x: abs(x), reverse=True)
         positions = get_positions(eigen, cluster)
         for point in points:
-            proj_point = []
-            for idx,pos in enumerate(positions):
-                proj_point.append(point[pos])
-                positions[idx] = pos
-            ret.append(tuple(proj_point))
-        return (list(set(ret)),positions)
+            proj_point = list(np.array(point)[positions])
+            ret.add(tuple(proj_point))
+        return (list(ret),positions)
 
     @property
     def qhull(self):
@@ -155,12 +175,13 @@ class PacH(object):
     @projection
     def get_qhull(self, points):
         points = set(map(tuple, points))
-        qhull = Qhull(points) # We'll hande the vebose ourselves
+        qhull = Qhull(points)
         qhull.compute_hiperspaces()
         return qhull
 
     def remove_unnecesary(self):
         if self.nfilename:
+            logger.debug('Starting to simplify model from negative points')
             if self.verbose:
                 print 'Starting to simplify model from negative points\n'
                 start_time = time.time()
@@ -187,6 +208,7 @@ class PacH(object):
             print "Ended with MCH with ",len(facets)," halfspaces"
             print 'This are them:\n'
             for facet in facets:print facet
+        logger.debug("Ended with MCH with %s halfspaces",len(facets))
         if self.verbose:
             elapsed_time = time.time() - start_time
             print 'Modeling done\n'
@@ -194,7 +216,9 @@ class PacH(object):
             print '#'*40+'\n'
 
     def pach(self):
+        logger.debug('Starting parsing')
         self.parse()
+        logger.debug('Starting modeling')
         self.model()
         self.remove_unnecesary()
 
@@ -380,6 +404,7 @@ class PacH(object):
         pnml = preamble + places + transitions + arcs + loops + ending
         with open(filename,'w') as ffile:
             ffile.write(pnml)
+        logger.info('Generated the PNML %s', filename)
         return True
 
     # Support for Z3 SMT-Solver
@@ -487,116 +512,11 @@ class PacH(object):
                 facet.op_simplify()
         return True
 
-def main():
-    usage = 'Usage: ./pach <LOG filename> [--debug][--verbose]'\
-        '\n\t[--negative <Negative points filename>] ]'\
-        '\n\t[--sampling [<number of samplings>] [<sampling size>]]'\
-        '\n\t[--projection [<max group size>] [<connected model>]]'\
-        '\n\t[--smt-simp [<timeout>]]'\
-        '\n\t[--smt-iter [<timeout>]]'
-    if not check_argv(sys.argv, minimum=1, maximum=15):
-        print usage
-        ret = -1
-    else:
-        ret = 0
-        try:
-            from os.path import isfile
-            filename = sys.argv[1]
-            if not (filename.endswith('.xes') or filename.endswith('.txt')):
-                print filename, ' does not end in .xes not .txt. It should...'
-                raise Exception('Filename does not end in .xes')
-            if not isfile(filename):
-                raise Exception("El archivo especificado no existe")
-            samp_num = 1
-            samp_size = None
-            if '--sampling' in sys.argv or '-s' in sys.argv:
-                samp_idx = '-s' in sys.argv and sys.argv.index('-s') or\
-                    sys.argv.index('--sampling')
-                try:
-                    samp_num = int(sys.argv[samp_idx+1])
-                except:
-                    pass
-                try:
-                    samp_size = int(sys.argv[samp_idx+2])
-                except:
-                    pass
-            proj_size = None
-            proj_connected = True
-            if '--projection' in sys.argv or '-p' in sys.argv:
-                # None indicates not to do projection.
-                # False indicates no limit
-                proj_size = False
-                proj_idx = '-p' in sys.argv and sys.argv.index('-p') or\
-                    sys.argv.index('--projection')
-                try:
-                    proj_size = int(sys.argv[proj_idx+1])
-                except:
-                    pass
-                try:
-                    proj_connected = int(sys.argv[proj_idx+2])
-                except:
-                    pass
-            nfilename = None
-            if '--negative' in sys.argv or '-n' in sys.argv:
-                nidx = '-n' in sys.argv and sys.argv.index('-n') or\
-                    sys.argv.index('--negative')
-                nfilename = sys.argv[nidx+1]
-                if not (nfilename.endswith('.xes') or nfilename.endswith('.txt')):
-                    print nfilename, ' does not end in .xes not .txt. It should...'
-                    raise Exception('Filename does not end in .xes')
-                if not isfile(nfilename):
-                    raise Exception("El archivo especificado no existe")
-
-            smt_matrix = False
-            smt_iter = False
-            smt_timeout = None
-            if '--smt-simp' in sys.argv or '-smt-s' in sys.argv:
-                smt_idx = '-smt-s' in sys.argv and sys.argv.index('-smt-s') or\
-                    sys.argv.index('--smt-simp')
-                smt_matrix = True
-                try:
-                    smt_timeout = int(sys.argv[smt_idx+1])
-                except:
-                    pass
-            elif '--smt-iter' in sys.argv or '-smt-s' in sys.argv:
-                smt_idx = '-smt-i' in sys.argv and sys.argv.index('-smt-i') or\
-                    sys.argv.index('--smt-iter')
-                smt_iter = True
-                try:
-                    smt_timeout = int(sys.argv[smt_idx+1])
-                except:
-                    pass
-            if '--debug' in sys.argv:
-                pdb.set_trace()
-            pach = PacH(filename, verbose=('--verbose' in sys.argv),
-                    samp_num=samp_num, samp_size=samp_size,
-                    proj_size=proj_size, proj_connected=proj_connected,
-                    nfilename=nfilename,
-                    smt_matrix=smt_matrix,
-                    smt_iter=smt_iter,
-                    smt_timeout=smt_timeout)
-            pach.pach()
-            filename = None
-            if '--output' in sys.argv or '-o' in sys.argv:
-                file_idx = '-o' in sys.argv and sys.argv.index('-o') or\
-                    sys.argv.index('--output')
-                try:
-                    filename = sys.argv[file_idx+1]
-                except:
-                    pass
-            pach.generate_pnml(filename=filename)
-        except Exception, err:
-            ret = 1
-            if hasattr(err, 'message'):
-                print 'Error: ', err.message
-            else:
-                print 'Error: ', err
-        return ret
-
 if __name__ == '__main__':
-    import sys, traceback
+    import sys, traceback, pdb
+    from mains import pach_main
     try:
-        main()
+        pach_main()
     except:
         type, value, tb = sys.exc_info()
         traceback.print_exc()

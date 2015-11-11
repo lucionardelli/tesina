@@ -4,6 +4,8 @@ import numpy as np
 import random
 from custom_exceptions import CannotGetClusters
 
+from config import *
+
 def cluster_points(X, mu):
     clusters  = {}
     for x in X:
@@ -21,7 +23,7 @@ def reevaluate_centers(mu, clusters):
     return newmu
 
 def has_converged(mu, oldmu):
-    return set([tuple(a) for a in mu]) == set([tuple(a) for a in oldmu])
+    return set(mu) == set(oldmu)
 
 def find_centers(X, K, oldmu=None, mu=None):
     # X tiene que ser una lista de np.array
@@ -31,6 +33,7 @@ def find_centers(X, K, oldmu=None, mu=None):
         oldmu = random.sample(X, K)
     if mu is None:
         mu = random.sample(X, K)
+    clusters = {}
     while not has_converged(mu, oldmu):
         oldmu = mu
         # Assign all points in X to clusters
@@ -39,16 +42,36 @@ def find_centers(X, K, oldmu=None, mu=None):
         mu = reevaluate_centers(oldmu, clusters)
     return(mu, clusters)
 
-def two_means(points,max_size=None):
-    # El algoritmo de kmeans espera un arreglo de NumPy arrays
-    # El centroide inicial y el máximo
-    clusters = cluster_points(points,[min(points),max(points)])
+def two_means(points,max_size=None,min_size=None):
+    points = [abs(x) for x in points]
+    # Como comenzamos con centroides random, puede fallar
+    retries = KMEANS
+    logger.debug('Being k-means a random-seeded process, we will make %s retries', retries)
+    clusters = []
+    logger.debug('Points are: %s',points)
+    while len(clusters) == 0 and retries > 0:
+        logger.debug('Try %s of %s for k-means',(KMEANS+1-retries),retries)
+        mu, clusters = find_centers(points, 2)
+        retries -= 1
     if len(clusters) == 0:
-        raise CannotGetClusters()
+        logger.debug('Cannot get clusters with k-means for points %s',points)
+        #raise CannotGetClusters()
     clu0 = clusters.get(0,[])
     clu1 = clusters.get(1,[])
+    if len(clu1) == 0 or (len(clu0) > 0 and max(clu0) > max(clu1)):
+        tmp = clu0
+        clu0 = clu1
+        clu1 = tmp
     if max_size and len(clu1) > max_size:
         clu1.sort()
         clu0 = clu0 + clu1[:len(clu1)-max_size]
         clu1 = clu1[len(clu1)-max_size:]
+    if min_size and len(clu0) and len(clu1) <= min_size:
+        clu0.sort()
+        clu1 = clu0[:-1*len(clu1)-min_size] + clu1
+        clu0 = clu0[len(clu1)-min_size:]
+    logger.info('Length of cluster 0 is: %s',len(clu0))
+    logger.info('Length of cluster 1 is: %s',len(clu1))
+    logger.debug('Cluster 0 is: %s',clu0)
+    logger.debug('Cluster 1 is: %s',clu1)
     return clu0, clu1

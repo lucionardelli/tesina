@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
 import numpy as np
+
+from config import logger
 class CorrMatrix(object):
     """
+    The correlation Matrix as defined in the paper
+    "Process Discovery Algorithms Using Numerical
+        Abstract Domains"
     """
 
     def __init__(self, pv_array, verbose=False):
@@ -64,11 +69,10 @@ class CorrMatrix(object):
         self.eigenvalues, self.eigenvector = np.linalg.eig(matrix)
         return True
 
-    def update(self, row_idx, make_zero):
-        row = self.matrix[row_idx]
-        for x in xrange(self.dim):
-            if row[x] in make_zero:
-                self.matrix[:,x] = np.zeros(self.dim)
+    def update(self, positions):
+        for x in positions:
+            self.matrix[:,x] = np.zeros(self.dim)
+            self.matrix[x,:] = np.zeros(self.dim)
         self.eigenvalues, self.eigenvector = np.linalg.eig(self.matrix)
 
     def closest_points(self,clusters):
@@ -90,8 +94,11 @@ class CorrMatrix(object):
                         closest_tuple = (point,idx)
 
         p0,p1 = closest_tuple
-        cor0 = np.array(rel[p0])
-        cor1 = np.array(rel[p1])
+        if p0 and p1:
+            cor0 = np.array(rel.get(p0,self[p0,:]))
+            cor1 = np.array(rel.get(p1,self[p1,:]))
+        else:
+            cor0 = cor1 = None
         return  p0,p1,cor0,cor1
 
     def closest_point(self,cluster):

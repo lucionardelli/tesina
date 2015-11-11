@@ -37,11 +37,18 @@ def almost_equal(f1, f2, tolerance=0.00001):
     return abs(f1 - f2) <= tolerance * max(abs(f1), abs(f2))
 
 def get_positions(eigenvector, cluster):
+    """
+        Finds the positions of the elements
+        of abs(<cluster>) in the abs(eigenvector)
+    """
     # We ensure that first argument is a list-like
     evect = list(eigenvector)
     ret = []
     for val in cluster:
-        ret.append(evect.index(val))
+        if val in evect:
+            ret.append(evect.index(val))
+        elif -1*val in evect:
+            ret.append(evect.index(-1*val))
     return ret
 
 def my_round(point):

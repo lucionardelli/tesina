@@ -6,6 +6,8 @@ from utils import check_argv
 import pdb
 import numpy as np
 
+from config import logger
+
 from corrmatrix import CorrMatrix
 
 class XesParser(object):
@@ -137,50 +139,11 @@ class AdHocParser(XesParser):
         self.dim = len(self.event_dictionary)
         return True
 
-def main():
-    usage = """
-        Usage: ./parser.py <LOG filename> [--verbose][--debug]
-    """
-    if not check_argv(sys.argv, minimum=1, maximum=4):
-        print usage
-        ret = -1
-    else:
-        ret = 0
-        try:
-            if '--debug' in sys.argv:
-                pdb.set_trace()
-            filename = sys.argv[1]
-            if not (filename.endswith('.xes') or filename.endswith('.txt')):
-                print filename, ' does not end in .xes nor .txt. It should...'
-                raise Exception('Filename has wrong extension')
-            if not isfile(filename):
-                raise Exception("El archivo especificado no existe")
-            if filename.endswith('.xes'):
-                obj = XesParser(filename, verbose='--verbose' in sys.argv)
-            elif filename.endswith('.txt'):
-                obj = AdHocParser(filename, verbose='--verbose' in sys.argv)
-            obj.parse()
-            if '--verbose' in sys.argv:
-                print 'Parse done. Calcuting Parikhs vector'
-            obj.parse()
-            obj.parikhs_vector()
-            CorrMatrix(obj.pv_array)
-            print 'Se encontraron {0} puntos en un espacio de dimensión {1}'.format(
-                    len(obj.pv_set), obj.dim)
-            if '--verbose' in sys.argv:
-                print "#"*15
-        except Exception, err:
-            ret = 1
-            if hasattr(err, 'message'):
-                print 'Error: ', err.message
-            else:
-                print 'Error: ', err
-        return ret
-
 if __name__ == '__main__':
     import sys, traceback
+    from mains import parser_main
     try:
-        main()
+        parser_main()
     except:
         type, value, tb = sys.exc_info()
         traceback.print_exc()
