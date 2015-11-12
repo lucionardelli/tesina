@@ -2,6 +2,7 @@
 # -*- coding: UTF-8
 from qhull import Qhull
 from parser import XesParser, AdHocParser
+from negative_parser import NegativeParser
 from corrmatrix import CorrMatrix
 from utils import get_positions, rotate_dict
 import time
@@ -29,7 +30,8 @@ class PacH(object):
             nfilename=None,
             smt_matrix=False,
             smt_iter=False,
-            smt_timeout=0):
+            smt_timeout=0,
+            sanity_check=True):
         # El archivo de trazas
         logger.info('Positive traces file: %s', filename)
         self.filename = filename
@@ -65,6 +67,7 @@ class PacH(object):
         if self.samp_size != 0:
             logger.info('Samples will have %s points',self.samp_size)
         # Projection configuration
+        self.projections = {}
         # If proj_size is None, do not do projection
         if proj_size is not None:
             if proj_size:
@@ -76,6 +79,8 @@ class PacH(object):
         if proj_connected:
             logger.info('Will try to connect the projections')
         self.proj_connected = proj_connected
+        # Do Sanity check after projectiong?
+        self.sanity_check = sanity_check
 
     def parse_negatives(self):
         if not self.nfilename:
@@ -87,14 +92,16 @@ class PacH(object):
             print 'Starting parse of negative traces\n'
             start_time = time.time()
         if self.nfilename.endswith('.xes'):
-            parser = XesParser(self.nfilename)
+            parser = NegativeParser(self.nfilename,
+                    required_dimension=self.dim,
+                    event_dictionary=self.event_dictionary)
         elif self.filename.endswith('.txt'):
-            parser = AdHocParser(self.nfilename)
+           raise Exception('Not implemented yet!')
         else:
-            logger.error("Error in file %s extension. Only '.xes' and '.txt'"\
-                    " are allowed!",(self.nfilename or ''))
-            raise Exception("Error in file %s extension. Only '.xes' and '.txt'"\
-                    " are allowed!"%(self.nfilename or ''))
+            logger.error("Error in file %s extension. Only '.xes'"\
+                    " is allowed!",(self.nfilename or ''))
+            raise Exception("Error in file %s extension. Only '.xes'"\
+                    " is allowed!"%(self.nfilename or ''))
         parser.parikhs_vector()
         self.npv_traces = parser.pv_traces
         self.npv_set = parser.pv_set
@@ -149,17 +156,27 @@ class PacH(object):
             in the eigen vector
             returns the projection and the list of projected points indexes
         """
+        proj_nbr = len(self.projections) + 1
         ret = set()
         # Por cada variable en el cluster
         # busco el valor correspondiente en los puntos iniciales
-        # y lo agrego a mi resultado
         # Los voy recorriendo en "orden de correlación"
-        cluster.sort(key=lambda x: abs(x), reverse=True)
-        positions = get_positions(eigen, cluster)
+        # El cluster viene dado por valores absolutos
+        # pero por las dudas...
+        cluster = list(set([abs(x) for x in cluster]))
+        cluster.sort(reverse=True)
+        proj_idx = []
+        for proj in cluster:
+            # Cuando conectamos dos proyecciones pasamos ambos valores concatenados
+            proj_idx += [idx%self.dim for idx,val in enumerate(eigen) if abs(val) == proj\
+                    and idx%self.dim not in proj_idx]
+
         for point in points:
-            proj_point = list(np.array(point)[positions])
+            proj_point = list(np.array(point)[proj_idx])
             ret.add(tuple(proj_point))
-        return (list(ret),positions)
+
+        self.projections[proj_nbr] = proj_idx
+        return (list(ret),proj_idx)
 
     @property
     def qhull(self):

@@ -23,7 +23,7 @@ def reevaluate_centers(mu, clusters):
     return newmu
 
 def has_converged(mu, oldmu):
-    return set(mu) == set(oldmu)
+    return set(mu) == set(oldmu) and len(set(mu)) == len(oldmu)
 
 def find_centers(X, K, oldmu=None, mu=None):
     # X tiene que ser una lista de np.array
@@ -46,7 +46,6 @@ def two_means(points,max_size=None,min_size=None):
     points = [abs(x) for x in points]
     # Como comenzamos con centroides random, puede fallar
     retries = KMEANS
-    logger.debug('Being k-means a random-seeded process, we will make %s retries', retries)
     clusters = []
     logger.debug('Points are: %s',points)
     while len(clusters) == 0 and retries > 0:

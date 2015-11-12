@@ -18,3 +18,6 @@ class CannotProject(Exception):
 
 class CannotIntegerify(Exception):
     pass
+
+class LostPoints(Exception):
+    pass

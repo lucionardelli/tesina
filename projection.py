@@ -2,7 +2,8 @@
 # -*- coding: UTF-8
 import numpy as np
 from corrmatrix import CorrMatrix
-from kmeans import two_means
+#from kmeans import two_means
+from kmeans_plus_plus import two_means
 
 from config import *
 
@@ -24,21 +25,29 @@ def projection(func):
             proj_count = 0
             logger.debug('Calculate hull with projection')
             while True:
-                proj_count += 1
-                logger.debug('Projection #%s',proj_count)
                 # Hacemos una lista de pares (valor, posicion)
-                tup = [(abs(y),x) for x,y in enumerate(corr.eigenvalues)]
-                # la ordenamos ascendentemente por el valor
-                # y la iteramos (solo nos interesan los índices ordenadamente)
-                tup.sort(reverse=True)
-                # Si 'tup' no tiene al menos un elemento algo anduvo mal...
-                # es como si no tuviesemos eigen-valores en la matriz
+                max_ev = 0
+                max_idx = None
+                eigen = None
                 # Tomamos el eigenvector correspondiente al mayor eigenvalor
                 # ya que se espera que sea el que más info tiene sobre
                 # correlaciones
-                _,idx = tup[0]
-                logger.debug('Leader row # of CORR matrix %s',idx)
-                eigen = corr.eigenvector[:,idx]
+                for idx,val in enumerate(corr.eigenvalues):
+                    if abs(val) > max_ev:
+                        max_ev = abs(val)
+                        max_idx = idx
+                        eigen = corr.eigenvector[:,idx]
+                logger.debug('Leader row # of CORR matrix %s',max_idx)
+                # Si 'eigen' es None
+                # es porque todos los eigen-valores eran 0
+                # ya somos conexos!
+                if eigen is None:
+                    logger.info('The model is all projected, '\
+                            'finishing projections')
+                    break
+
+                proj_count += 1
+                logger.info('Projection #%s',proj_count)
                 # tomamos la fila correspondiente al líder
                 # (más grande en valor absoluto)
                 # en la matriz de correlación
@@ -46,7 +55,13 @@ def projection(func):
                 leader = eigen_abs.index(max(eigen_abs))
                 leader_row = corr.matrix[leader]
                 #solo utilizamos el cluster de mayor correlación
-                _, cluster1 = two_means(leader_row,max_size=self.proj_size)
+                logger.debug('Calling k-means with %s',leader_row)
+                cluster0, cluster1 = two_means(leader_row,max_size=self.proj_size)
+                logger.debug('Cluster0: %s \n Cluster1: %s', cluster0, cluster1)
+                if 0.0  in cluster1:
+                    logger.error("Error getting Cluster. "\
+                            " 0.0 is present in %s",cluster1)
+                    raise Exception('Cannot get clusters!')
                 if len(cluster1) <= 1:
                     if qhull is not None:
                         break
@@ -59,26 +74,27 @@ def projection(func):
                             cluster1.append(max(cluster0))
                         logger.error('Using %s as the cluster closer to 1',cluster1)
                 pts_proj, projected = self.project(points, leader_row, cluster1)
-                logger.info('We will project onto this points: %s', projected)
+                logger.debug('We will project onto this points: %s', projected)
                 projections[proj_count] = projected
                 qhull = func(self, pts_proj, *args, **kwargs)
                 # Extendemos a la dimensión original
-                qhull.extend(leader_row, cluster1)
+                qhull.extend(leader_row, cluster1,orig_dim=self.dim)
                 # Agregamos las facetas que ya calculamos
                 qhull.union(facets)
                 facets = qhull.facets
 
                 #NOTE
                 # Esto es para chequear que no dejando a nadia afuera
-                # pero hace todo más lento en ejemplos grandes
-                #where = qhull.separate(self.pv_set)
-                #if len(where.get('outside',[])) > 0:
-                #    log.error('Nooo!!!! We lost somebody!')
-                #    import pdb;pdb.set_trace()
-                #    qhull.separate(where['outside'])
+                if self.sanity_check:
+                    assert qhull.all_in(self.pv_set)
 
                 # Actualizamos la matriz poniendo en 0 los valores usados
                 corr.update(projected)
+
+                if not corr.matrix.any():
+                    logger.info('The model is all projected, '\
+                            'finishing projections')
+                    break
             if self.proj_connected:
                 # Intentamos hacer que el modelo sea conexo
                 # con este algoritmo heurístico
@@ -91,27 +107,41 @@ def projection(func):
                         logger.debug('Closer points are %s and %s', p0, p1)
                         if not (np.any(cor0) and np.any(cor1)):
                             break
-                        con_line = cor0 + cor1
+                        con_line = np.concatenate((cor0,cor1))
                         if np.any(last_con_line) and np.all(last_con_line==con_line):
                             break
                         else:
                             last_con_line = con_line
-                        _, cluster1 = two_means(con_line,max_size=self.proj_size)
+                        logger.debug('Calling k-means with %s',con_line)
+                        cluster0, cluster1 = two_means(con_line,max_size=self.proj_size)
+                        logger.debug('Cluster0: %s \n Cluster1: %s', cluster0, cluster1)
                         if len(cluster1) <= 1:
                             break
+                        if 0.0  in cluster1:
+                            logger.error("Error getting Cluster. "\
+                                    " 0.0 is present in %s",cluster1)
+                            raise Exception('Cannot get clusters!')
                         pts_proj, projected = self.project(points, con_line, cluster1)
+                        logger.debug('We will project onto this points: %s', projected)
                         qhull = func(self, pts_proj, *args, **kwargs)
                         # Extendemos a la dimensión original
-                        qhull.extend(con_line, cluster1)
+                        qhull.extend(con_line, cluster1, orig_dim=self.dim)
                         # Agregamos las facetas que ya calculamos
                         qhull.union(facets)
                         facets = qhull.facets
+
+                        #NOTE
+                        # Esto es para chequear que no dejando a nadia afuera
+                        if self.sanity_check:
+                            assert qhull.all_in(self.pv_set)
+
                         # Actualizamos la matriz poniendo en 0 los valores usados
                         corr2.update(projected)
                         connections_count += 1
                     except Exception, err:
-                        pass
-                    logger.info('Succesfull connections of projections: %s',connections_count)
+                        break
+                logger.info('Succesfull connections of projections: %s',connections_count)
         return qhull
     return do_projection
+
 

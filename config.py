@@ -13,7 +13,7 @@ TOLERANCE =0.0001
 
 LOG_CONFIG = {
     'level': logging.INFO,
-    'filename': 'pach.log',
+    'filename': '/var/log/pach.log',
 # Solo interesa el ultimo log
     'filemode': 'a',
     'format': '%(asctime)s %(levelname)-8s %(message)s',

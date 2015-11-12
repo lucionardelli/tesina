@@ -7,6 +7,7 @@ from os.path import isfile
 from pach import PacH
 from qhull import Qhull
 from parser import XesParser, AdHocParser
+from negative_parser import NegativeParser
 
 def pach_main():
     usage = 'Usage: ./pach <LOG filename> [--debug][--verbose]'\
@@ -14,8 +15,9 @@ def pach_main():
         '\n\t[--sampling [<number of samplings>] [<sampling size>]]'\
         '\n\t[--projection [<max group size>] [<connected model>]]'\
         '\n\t[--smt-simp [<timeout>]]'\
-        '\n\t[--smt-iter [<timeout>]]'
-    if not check_argv(sys.argv, minimum=1, maximum=15):
+        '\n\t[--smt-iter [<timeout>]]'\
+        '\n\t[--no-sanity]'
+    if not check_argv(sys.argv, minimum=1, maximum=16):
         print usage
         ret = -1
     else:
@@ -69,7 +71,7 @@ def pach_main():
 
             smt_matrix = False
             smt_iter = False
-            smt_timeout = None
+            smt_timeout = 0
             if '--smt-simp' in sys.argv or '-smt-s' in sys.argv:
                 smt_idx = '-smt-s' in sys.argv and sys.argv.index('-smt-s') or\
                     sys.argv.index('--smt-simp')
@@ -86,6 +88,9 @@ def pach_main():
                     smt_timeout = int(sys.argv[smt_idx+1])
                 except:
                     pass
+            sc = True
+            if '--no-sanity' in sys.argv:
+                sc = False
             if '--debug' in sys.argv:
                 pdb.set_trace()
             pach = PacH(filename, verbose=('--verbose' in sys.argv),
@@ -94,7 +99,8 @@ def pach_main():
                     nfilename=nfilename,
                     smt_matrix=smt_matrix,
                     smt_iter=smt_iter,
-                    smt_timeout=smt_timeout)
+                    smt_timeout=smt_timeout,
+                    sanity_check=sc)
             pach.pach()
             filename = None
             if '--output' in sys.argv or '-o' in sys.argv:
@@ -138,7 +144,6 @@ def parser_main():
             obj.parse()
             if '--verbose' in sys.argv:
                 print 'Parse done. Calcuting Parikhs vector'
-            obj.parse()
             obj.parikhs_vector()
             CorrMatrix(obj.pv_array)
             print 'Se encontraron {0} puntos en un espacio de dimensión {1}'.format(
@@ -195,4 +200,38 @@ def qhull_main():
                 print 'Error: ', err
     return ret
 
+def negative_parser_main():
+    usage = """
+        Usage: ./parser.py <negative XES LOG filename> [--verbose][--debug]
+    """
+    if not check_argv(sys.argv, minimum=1, maximum=4):
+        print usage
+        ret = -1
+    else:
+        ret = 0
+        try:
+            filename = sys.argv[1]
+            if not filename.endswith('.xes'):
+                print filename, ' does not end in .xes. It should...'
+                raise Exception('Filename has wrong extension')
+            if not isfile(filename):
+                raise Exception("El archivo especificado no existe")
+            if '--debug' in sys.argv:
+                pdb.set_trace()
+            obj = NegativeParser(filename, verbose='--verbose' in sys.argv)
+            obj.parse()
+            if '--verbose' in sys.argv:
+                print 'Parse done. Calcuting Parikhs vector'
+            obj.parikhs_vector()
+            print 'Se encontraron {0} puntos en un espacio de dimensión {1}'.format(
+                    len(obj.pv_set), obj.dim)
+            if '--verbose' in sys.argv:
+                print "#"*15
+        except Exception, err:
+            ret = 1
+            if hasattr(err, 'message'):
+                print 'Error: ', err.message
+            else:
+                print 'Error: ', err
+        return ret
 

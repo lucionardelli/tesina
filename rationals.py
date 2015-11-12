@@ -24,7 +24,7 @@ def make_common_divisor(numerators,denominators):
         numerators[idx] = (this_lcm / den) * numerators[idx]
     return numerators,[this_lcm]*len(numerators)
 
-def integer_coeff(float_list):
+def old_integer_coeff(float_list):
     relations = []
     possibilities = []
     for fl1 in float_list:
@@ -64,3 +64,26 @@ def integer_coeff(float_list):
             sup = max_val
             ret = pos
     return ret
+
+from math import floor
+
+def integer_coeff(float_list):
+    minimum = None
+    abs_float = []
+    modif = []
+    for fl in float_list:
+        if almost_equal(fl, 0.0, tolerance=TOLERANCE):
+            fl = 0.0
+        if fl >= 0:
+            modif.append(1)
+        else:
+            fl = abs(fl)
+            modif.append(-1)
+        abs_float.append(fl)
+        if fl and (minimum is None or fl <= minimum):
+            minimum = fl
+    bigger_one = []
+    for fl in float_list:
+        fl = fl / minimum
+        bigger_one.append(int(floor(fl)))
+    return bigger_one

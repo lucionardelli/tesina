@@ -3,13 +3,15 @@
 import random
 import numpy as np
 
+from config import *
+
 class KMeans(object):
     def __init__(self, K, X):
         self.K = K
         self.X = X
         self.N = len(X)
         self.mu = None
-        self.clusters = None
+        self.clusters = {}
 
     def _cluster_points(self):
         mu = self.mu
@@ -72,15 +74,28 @@ class KPlusPlus(KMeans):
             self._dist_from_centers()
             self.mu.append(self._choose_next_center())
 
-def two_means_plus_plus(points,max_size=None):
+def two_means(points,max_size=None):
+    retries = KMEANS
+    logger.debug('Points are: %s',points)
     kplusplus = KPlusPlus(2,[np.array([abs(x)]) for x in points])
-    #kplusplus = KPlusPlus(2,[np.array([x,0]) for x in points])
-    kplusplus.init_centers()
-    kplusplus.find_centers()
-    clu0 = kplusplus.clusters.get(0,[])
-    clu1 = kplusplus.clusters.get(1,[])
+    while len(kplusplus.clusters) == 0 and retries > 0:
+        kplusplus.init_centers()
+        kplusplus.find_centers()
+        clu0 = kplusplus.clusters.get(0,[])
+        clu0 = [x[0] for x in clu0]
+        clu1 = kplusplus.clusters.get(1,[])
+        clu1 = [x[0] for x in clu1]
+        retries -= 1
+    if len(clu1) == 0 or (len(clu0) > 0 and max(clu0) > max(clu1)):
+        tmp = clu0
+        clu0 = clu1
+        clu1 = tmp
     if max_size and len(clu1) > max_size:
         clu1.sort()
         clu0 = clu0 + clu1[:len(clu1)-max_size]
         clu1 = clu1[len(clu1)-max_size:]
+    logger.debug('Cluster 0 is: %s',clu0)
+    logger.debug('Cluster 1 is: %s',clu1)
+    logger.debug('Length of cluster 0 is: %s',len(clu0))
+    logger.debug('Length of cluster 1 is: %s',len(clu1))
     return clu0, clu1

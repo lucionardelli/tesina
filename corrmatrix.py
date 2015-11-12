@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
 import numpy as np
-
 from config import logger
+
 class CorrMatrix(object):
     """
     The correlation Matrix as defined in the paper
@@ -79,22 +79,30 @@ class CorrMatrix(object):
         rel = {}
         closest_tuple = (None,None)
         max_all = 0
+        seen = {}
         for key,cluster in clusters.items():
             for point in cluster:
+                # Which cluster contains this point
+                seen[point] = key
                 corr_list = rel.setdefault(point,[])
                 for idx,corr in enumerate(self[point,:]):
                     corr = abs(corr)
                     if idx in cluster:
-                        corr_list.append(0)
+                        corr_list.append(corr)
                         continue
                     corr_list.append(corr)
                     if max_all < corr:
                         closest = idx
                         max_all = corr
                         closest_tuple = (point,idx)
-
         p0,p1 = closest_tuple
         if p0 and p1:
+            for pnbr,p in enumerate([p0,p1]):
+                if p in seen:
+                    logger.info('Closests point p%d is from cluster %s',
+                            pnbr, seen[p])
+                else:
+                    logger.info('Closests point p%d was disconected',pnbr)
             cor0 = np.array(rel.get(p0,self[p0,:]))
             cor1 = np.array(rel.get(p1,self[p1,:]))
         else:
@@ -102,6 +110,7 @@ class CorrMatrix(object):
         return  p0,p1,cor0,cor1
 
     def closest_point(self,cluster):
+        raise Exception('Deprecated function')
         rel = {}
         closest_tuple = (None,None)
         max_all = 0

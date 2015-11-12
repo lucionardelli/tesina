@@ -8,33 +8,18 @@ import numpy as np
 
 from config import logger
 
-from corrmatrix import CorrMatrix
+from parser import XesParser
 
-class XesParser(object):
+class NegativeParser(XesParser):
 
-    def __init__(self,xes_file_name, verbose=False):
-        if not isfile(xes_file_name):
-            raise Exception("El archivo especificado no existe")
-        self.filename = xes_file_name
-        # Diferent presentation of Parikhs Vectors
-        self.pv_set = set()
-        self.pv_array = np.array([])
-        self.pv_traces = {}
-        self.parsed = False
-        self.root = None
-        self.traces = {}
-        self.max_len = 0
-        self.max_len_idx = None
-        self.event_dictionary = {}
-        self.dim = 0
-        self.verbose = verbose
 
-    def __add_to_position(self, xs, position, value=1):
-        """
-        Given a list of numbers and a position, adds "value" to that position
-        changing the same list
-        """
-        xs[position] += value
+    def __init__(self,xes_file_name, verbose=False,
+            # New values required for negative traces
+            required_dimension=0,
+            event_dictionary=None):
+        self.event_dictionary = event_dictionary or {}
+        self.rdim = required_dimension or len(self.event_dictionary)
+        super(NegativeParser,self).__init__(xes_file_name, verbose=verbose)
 
     def _parse(self):
         """
@@ -65,7 +50,7 @@ class XesParser(object):
                 if tr_val['length'] > self.max_len:
                     self.max_len = tr_val['length']
                     self.max_len_idx = idx
-        self.dim = len(self.event_dictionary)
+        self.dim = self.rdim or len(self.event_dictionary)
         return True
 
     def parse(self):
@@ -73,27 +58,30 @@ class XesParser(object):
         self.parsed = True
         return self.parsed
 
+    def __add_to_position(self, vector, position, value=1):
+        """
+        TODO CHANGE THE NAME OF THIS FUNCTION TO BE ABLE TO CALL SUPER
+        """
+        vector[position] += value
+
     def _make_parikhs_vector(self):
         """
             make parickhs vector of all traces
         """
         hiper_zero = np.array([0]*self.dim)
-        # El zero siempre pertencene a todos los Parikhs vector
-        self.pv_set.add(tuple(hiper_zero))
+        # El zero no pertenece nunca a las trazas negativas
         for idx,trace in self.traces.items():
             # El zero siempre pertencene a todos los Parikhs vector
-            this_pv_trace = self.pv_traces.setdefault(idx,[hiper_zero])
+            this_pv_trace = self.pv_traces.setdefault(idx,[np.copy(hiper_zero)])
             for val in trace['trace']:
                 # No hay valor por defecto, debería estar siempre en el dict
                 pos = self.event_dictionary.get(val)
-                # Necesitamos una copia de la última lista para modificarla
-                # y sumarle una ocurrencia al evento
-                last_pv = this_pv_trace[-1].copy()
-                self.__add_to_position(last_pv, pos, value=1)
+                # Buscamos el valor creado y lo modificamos según
+                # la ocurrencia al evento
+                neg_pv = this_pv_trace[0]
+                self.__add_to_position(neg_pv, pos, value=1)
                 # Lo agregamos al conjunto de todos los puntos
-                self.pv_set.add(tuple(last_pv))
-                # Agregamos el parikh vector al látice de todos los puntos
-                this_pv_trace.append(last_pv)
+                self.pv_set.add(tuple(neg_pv))
         self.pv_array = np.array(list(self.pv_set))
         return True
 
@@ -143,9 +131,9 @@ class AdHocParser(XesParser):
 
 if __name__ == '__main__':
     import sys, traceback
-    from mains import parser_main
+    from mains import negative_parser_main
     try:
-        parser_main()
+        negative_parser_main()
     except:
         type, value, tb = sys.exc_info()
         traceback.print_exc()

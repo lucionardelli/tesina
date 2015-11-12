@@ -3,7 +3,7 @@
 from pyhull import qconvex
 from utils import get_positions
 from halfspace import Halfspace
-from custom_exceptions import IncorrectOutput, CannotGetHull
+from custom_exceptions import IncorrectOutput, CannotGetHull, LostPoints
 import sys
 from redirect_output import stderr_redirected
 
@@ -49,13 +49,17 @@ class Qhull(object):
             logger.error('No points to compute hull!')
             raise Exception('No points to compute hull!')
         stderr_fd = sys.stderr.fileno()
-        with open('/tmp/output.txt', 'w') as f, stderr_redirected(f):
+        with open('/tmp/qhull-output.log', 'w') as f, stderr_redirected(f):
             points = list(self.points)
             logger.info('Searching for hull in dimension %s based on %s points',
                     len(points[0]),len(points))
             output = qconvex('n',points)
-            #if len(output) == 1:
+            if len(output) == 1:
                 #print "Shake it baby!"
+                logger.debug('Could not get Hull. Joggle input?')
+# TODO sacar las líneas que siguen. Eran para chequear
+#                import pdb;pdb.set_trace()
+#                output = qconvex('n',points)
                 #output = qconvex('QJ n',list(self.points))
         try:
             dim, facets_nbr, facets = self.__parse_hs_output(output)
@@ -111,6 +115,18 @@ class Qhull(object):
                 outside.append(point)
         return ret
 
+    def all_in(self, points):
+        #NOTE
+        # Esto es para chequear que no dejando a nadia afuera
+        # hace todo más lento en ejemplos grandes
+        logger.info('Sanity check: Are all points still valid?')
+        where = self.separate(points)
+        if len(where.get('outside',[])) > 0:
+            logger.error('Nooo!!!! We lost some!')
+            raise LostPoints('We lost some: %s', where['outside'])
+        logger.info('Sanity check passed')
+        return True
+
     def is_inside(self,outsider):
         ret = True
         for facet in self.facets:
@@ -138,7 +154,7 @@ class Qhull(object):
         for facet in self.facets:
             facet.extend_dimension(dim, ext_dict)
 
-    def extend(self, eigen, cluster):
+    def extend(self, eigen, cluster, orig_dim=None):
         """
          Given a qhull computed from a cluster (i.e. projection)
          "extended" it (making all the other variables zero)
@@ -147,9 +163,15 @@ class Qhull(object):
         # Nuevamente los odeno y busco la posición
         # en el eigenvector original. Luego "agrando"
         # el qhull en concordancia
-        cluster.sort(key=lambda x: abs(x), reverse=True)
-        positions = get_positions(eigen, cluster)
-        self.extend_dimension(len(eigen), positions)
+        cluster = list(set([abs(x) for x in cluster]))
+        cluster.sort(reverse=True)
+        orig_dim = orig_dim or self.dim
+        proj_idx = []
+        for proj in cluster:
+            # Cuando conectamos dos proyecciones pasamos ambos valores concatenados
+            proj_idx += [idx%orig_dim for idx,val in enumerate(eigen) if abs(val) == proj\
+                    and idx%orig_dim not in proj_idx]
+        self.extend_dimension(orig_dim, proj_idx)
 
     def can_eliminate(self,candidate, npoint):
         ret = False

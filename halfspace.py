@@ -89,7 +89,7 @@ class Halfspace(Halfspace):
         hs_repr = ' + '.join(hs_repr)
         return "{0}\t{1} + {2:.2f} <= 0".format(header, hs_repr, self.offset)
 
-    def inside(self, point):
+    def inside(self, point, use_original=False):
         """
         Determines if given points is inside the halfspace
         Operator determines on wich side of the hyperspace
@@ -98,8 +98,14 @@ class Halfspace(Halfspace):
         Args:
             origin: point to check if is in the hyperplane
         """
+        if use_original:
+            normal = self.__original_normal
+            offset = self.__original_offset
+        else:
+            normal = self.normal
+            offset = self.offset
         try:
-            eq_res = np.dot(self.__original_normal,point) + self.__original_offset
+            eq_res = np.dot(normal,point) + offset
         except Exception, err:
             raise WrongDimension()
         return eq_res < 0.0 or almost_equal(eq_res, 0.0, tolerance=TOLERANCE)
@@ -138,7 +144,6 @@ class Halfspace(Halfspace):
         # del hiperespacio a valores enteros
         if any(map(lambda x: not x.is_integer(), self.normal)):
             integerified = integer_coeff(self.normal+[self.offset])
-
             self.offset = integerified[-1]
             self.normal = integerified[:-1]
         else:
