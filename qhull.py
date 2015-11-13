@@ -6,6 +6,10 @@ from halfspace import Halfspace
 from custom_exceptions import IncorrectOutput, CannotGetHull, LostPoints
 import sys
 from redirect_output import stderr_redirected
+try:
+    import z3
+except:
+    pass
 
 from config import logger
 
@@ -16,7 +20,6 @@ class Qhull(object):
         self.__qhull = None
         self.facets = []
         self.verbose = verbose
-
 
     def __contains__(self, point):
         return self.is_inside(point)
@@ -187,25 +190,121 @@ class Qhull(object):
         for idx,facet in enumerate(self.facets):
             # Creamos un dummy hull para guardar los facets
             # menos el que se considera para eliminar
-            tmpqull = Qhull(set())
+            tmpqhull = Qhull(set())
             tmpqhull.facets = list(set(facets)-set([facet]))
             simplify = True
             for npoint in npoints:
-                if npoint in tmpqull:
+                if npoint in tmpqhull:
                     simplify = False
                     break
             if simplify:
                 facets.pop(idx - popped)
                 popped += 1
+        logger.info('Popped %d facets using negative info',popped)
         self.facets = facets
 
 
     def complexity(self):
-        comp = 0
+        complexity = 0
         for facet in self.facets:
-            sumFacet = reduce(add, map(abs, facet.normal), abs(facet.offset))
-            sumVals = sumVals + sumFacet
-        return sumVals
+            sum_facet = reduce(lambda x,r: abs(x) + abs(r),
+                    facet.normal,
+                    facet.offset)
+            complexity += sum_facet
+        return complexity
+
+    # Support for Z3 SMT-Solver
+    def smt_solution(self,timeout):
+        solver = z3.Solver()
+        solver.set("soft_timeout", timeout)
+        diff_sol = False
+        non_trivial = False
+        A1 = True
+        A2 = True
+        for p_id, place in enumerate(self.facets):
+            b = place.offset
+            z3_b = z3.Int("b" + str(p_id))
+            if b > 0:
+                solver.add(z3_b >= 0)
+                solver.add(z3_b <= b)
+            elif b< 0:
+                solver.add(z3_b <= 0)
+                solver.add(z3_b >= b)
+            else:
+                solver.add(z3_b == 0)
+
+            pos_x = True
+            simple = sum(abs(x) for x in place.normal) <= 1
+            diff_sig = reduce(lambda x,y:x*y, [x + 1 for x in place.normal]) < 1
+
+            if not simple and diff_sig:
+                some_produce = False
+                some_consume = False
+            h1 = b
+            h2 = z3_b
+            variables = []
+            for t_id, val in enumerate(place.normal):
+                z3_val = z3.Int("a" + str(p_id) + "," + str(t_id))
+                x = z3.Int("x" + str(t_id))
+                variables.append(x)
+                pos_x = z3.And(pos_x, x >= 0)
+                if val:
+                    if val > 0:
+                        solver.add(0 <= z3_val)
+                        solver.add(z3_val <= val)
+                    else:
+                        solver.add(val <= z3_val)
+                        solver.add(z3_val <= 0)
+                    if not simple and diff_sig:
+                        some_consume = z3.Or(some_consume, z3_val < 0)
+                        some_produce = z3.Or(some_produce, z3_val > 0)
+                    non_trivial = z3.Or(non_trivial, z3_val != 0)
+                    diff_sol = z3.Or(diff_sol, z3_val != val)
+                    h1 = h1 + val * x
+                    h2 = h2 + z3_val * x
+                else:
+                    solver.add(z3_val == 0)
+            if not simple and diff_sig:
+                solver.add(z3.simplify(some_consume))
+                solver.add(z3.simplify(some_produce))
+            A1 = z3.And(A1, h1 <= 0)
+            A2 = z3.And(A2, h2 <= 0)
+        solver.add(z3.simplify(non_trivial))
+        solver.add(z3.simplify(diff_sol))
+        solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, A1), A2))))
+        sol = solver.check()
+        if sol == z3.unsat or sol == z3.unknown:
+            ret = False
+        else:
+            ret = solver.model()
+        return ret
+
+    def smt_simplify(self, sol):
+        facets = []
+        if sol:
+            for p_id, place in enumerate(self.facets):
+                normal = []
+                b = int(str(sol[z3.Int("b" + str(p_id))]))
+                for t_id, val in enumerate(place.normal):
+                    z3_val = z3.Int("a" + str(p_id) + "," + str(t_id))
+                    normal.append(int(str(sol[z3_val])))
+                if sum(abs(x) for x in normal) != 0:
+                    # TODO Realmente no hay que convertir en intergers?
+                    # Son siempre enteros?
+                    f = Halfspace(normal, b, integer_vals=False)
+                    if not f in facets:
+                        facets.append(f)
+            self.facets = facets
+
+    def smt_hull_simplify(self,timeout=0):
+        sol = self.smt_solution(timeout)
+        while sol:
+            self.smt_simplify(sol)
+            sol = self.smt_solution(timeout)
+
+    def smt_facet_simplify(self,timeout=0):
+        for facet in self.facets:
+            facet.smt_facet_simplify(timeout)
 
 if __name__ == '__main__':
     import sys, traceback,pdb

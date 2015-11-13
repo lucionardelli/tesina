@@ -17,9 +17,9 @@ class NegativeParser(XesParser):
             # New values required for negative traces
             required_dimension=0,
             event_dictionary=None):
+        super(NegativeParser,self).__init__(xes_file_name, verbose=verbose)
         self.event_dictionary = event_dictionary or {}
         self.rdim = required_dimension or len(self.event_dictionary)
-        super(NegativeParser,self).__init__(xes_file_name, verbose=verbose)
 
     def _parse(self):
         """

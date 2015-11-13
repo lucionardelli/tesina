@@ -14,7 +14,7 @@ def pach_main():
         '\n\t[--negative <Negative points filename>] ]'\
         '\n\t[--sampling [<number of samplings>] [<sampling size>]]'\
         '\n\t[--projection [<max group size>] [<connected model>]]'\
-        '\n\t[--smt-simp [<timeout>]]'\
+        '\n\t[--smt-matrix [<timeout>]]'\
         '\n\t[--smt-iter [<timeout>]]'\
         '\n\t[--no-sanity]'
     if not check_argv(sys.argv, minimum=1, maximum=16):
@@ -72,15 +72,15 @@ def pach_main():
             smt_matrix = False
             smt_iter = False
             smt_timeout = 0
-            if '--smt-simp' in sys.argv or '-smt-s' in sys.argv:
-                smt_idx = '-smt-s' in sys.argv and sys.argv.index('-smt-s') or\
-                    sys.argv.index('--smt-simp')
+            if '--smt-matrix' in sys.argv or '-smt-m' in sys.argv:
+                smt_idx = '-smt-m' in sys.argv and sys.argv.index('-smt-m') or\
+                    sys.argv.index('--smt-matrix')
                 smt_matrix = True
                 try:
                     smt_timeout = int(sys.argv[smt_idx+1])
                 except:
                     pass
-            elif '--smt-iter' in sys.argv or '-smt-s' in sys.argv:
+            elif '--smt-iter' in sys.argv or '-smt-i' in sys.argv:
                 smt_idx = '-smt-i' in sys.argv and sys.argv.index('-smt-i') or\
                     sys.argv.index('--smt-iter')
                 smt_iter = True
@@ -101,7 +101,8 @@ def pach_main():
                     smt_iter=smt_iter,
                     smt_timeout=smt_timeout,
                     sanity_check=sc)
-            pach.pach()
+            complexity = pach.pach()
+            print '%s\t\t -> %s'%(filename,complexity)
             filename = None
             if '--output' in sys.argv or '-o' in sys.argv:
                 file_idx = '-o' in sys.argv and sys.argv.index('-o') or\
@@ -117,6 +118,7 @@ def pach_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            raise err
         return ret
 
 def parser_main():
@@ -156,6 +158,7 @@ def parser_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            raise err
         return ret
 
 def qhull_main():
@@ -198,6 +201,7 @@ def qhull_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            raise err
     return ret
 
 def negative_parser_main():
@@ -233,5 +237,6 @@ def negative_parser_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            raise err
         return ret
 

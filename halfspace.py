@@ -63,9 +63,9 @@ class Halfspace(Halfspace):
         for idx,coef in enumerate(self.normal):
             # Queremos dar vuelta el <= a 0 al imprimir
             if coef > 0:
-                hs_repr += " - {0: >4} x{1: <3}".format(coef,idx)
+                hs_repr += " - {0: >3} x{1: <2}".format(coef,idx)
             elif coef < 0:
-                hs_repr += " + {0: >4} x{1: <3}".format(abs(coef),idx)
+                hs_repr += " + {0: >3} x{1: <2}".format(abs(coef),idx)
             else:
                 # Los coeficientes 0 no los imprimimos
                 pass
@@ -74,9 +74,9 @@ class Halfspace(Halfspace):
             hs_repr = hs_repr[3:]
 
         if self.offset > 0:
-            ti_repr = ' -  {0: >3}'.format(abs(self.offset))
+            ti_repr = ' - {0: >3}'.format(abs(self.offset))
         elif self.offset < 0:
-            ti_repr = ' +  {0: >3}'.format(abs(self.offset))
+            ti_repr = ' + {0: >3}'.format(abs(self.offset))
         else:
             ti_repr = ''
         return "{0: <10}{1} {2} >= 0".format(header, hs_repr, ti_repr)
@@ -170,7 +170,6 @@ class Halfspace(Halfspace):
         pos_x = True
         simple = sum(abs(x) for x in self.normal) < 1
         non_trivial = False
-
         if not simple:
             some_consume = False
             some_produce = False
@@ -207,35 +206,31 @@ class Halfspace(Halfspace):
         if not simple:
             solver.add(z3.simplify(some_consume))
             solver.add(z3.simplify(some_produce))
-
         solver.add(z3.simplify(non_trivial))
         solver.add(z3.simplify(diff_sol))
         solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, h1 <= 0), h2 <= 0))))
 
         sol = solver.check()
         if sol == z3.unsat or sol == z3.unknown:
-            return False
+            ret = False
         else:
-            return solver.model()
+            ret = solver.model()
+        return ret
 
     def simplify(self, sol):
         normal = []
-        if sol != False:
+        if sol:
             offset = int(str(sol[z3.Int("b")]))
 
             for t_id, val in enumerate(self.normal):
                 z3_val = z3.Int("a" + str(t_id))
                 normal.append(int(str(sol[z3_val])))
             if sum(abs(x) for x in normal) != 0:
-                return Halfspace(normal, offset, False)
-            else:
-                return self
-        else:
-            return self
+                self.normal = normal
+                self.offset = offset
 
-    def op_simplify(self):
-        sol = self.smt_solution()
-        while sol != False:
-            self = self.simplify(sol)
-            sol = self.smt_solution()
-        return self
+    def smt_facet_simplify(self, timeout=0):
+        sol = self.smt_solution(timeout)
+        while sol:
+            self.simplify(sol)
+            sol = self.smt_solution(timeout)

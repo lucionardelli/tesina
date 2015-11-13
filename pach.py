@@ -15,13 +15,6 @@ from sampling import sampling
 from projection import projection
 
 from config import logger
-
-try:
-    import z3
-except:
-    #No module named z3, whouldn't be available
-    pass
-
 class PacH(object):
 
     def __init__(self, filename, verbose=False,
@@ -44,7 +37,6 @@ class PacH(object):
         self.pv_set = set()
         self.pv_array = np.array([])
         self._qhull = None
-        self._facets = []
         # Referentes a las trazas negativas
         self.npv_traces = []
         self.npv_set = set()
@@ -126,7 +118,8 @@ class PacH(object):
             raise Exception("Error in file %s extension. Only '.xes' and '.txt'"\
                     " are allowed!"%(self.filename or ''))
         parser.parikhs_vector()
-        self.event_dictionary = rotate_dict(parser.event_dictionary)
+        self.event_dictionary = parser.event_dictionary
+        self.reversed_dictionary = rotate_dict(parser.event_dictionary)
         self.pv_traces = parser.pv_traces
         self.pv_set = parser.pv_set
         self.pv_array = parser.pv_array
@@ -185,8 +178,7 @@ class PacH(object):
 
     @property
     def facets(self):
-        self._facets =  self._facets or self.qhull.facets
-        return self._facets
+        return self.qhull.facets
 
     @sampling
     @projection
@@ -205,12 +197,16 @@ class PacH(object):
             old_len = len(self.facets)
             self.qhull.simplify(self.npv_set)
             removed = len(self.facets) - old_len
+            if removed:
+                logger.debug('We removed %d facets without allowing negative points',removed)
+            else:
+                logger.debug("Couldn't simplify model without adding negative points")
             if self.verbose:
                 elapsed_time = time.time() - start_time
                 print 'Ended simplify from negative points\n'
                 print '# RESULTADO  obtenido en: ', elapsed_time
                 if removed:
-                    print 'We removed %d facets without allowing negative points'
+                    print 'We removed %d facets without allowing negative points' % removed
                 else:
                     print "Couldn't simplify model without adding negative points"
                 print '#'*40+'\n'
@@ -232,12 +228,28 @@ class PacH(object):
             print '# RESULTADO  obtenido en: ', elapsed_time
             print '#'*40+'\n'
 
+    def smt_simplify(self, smt_simp_type=None):
+        if self.smt_matrix:
+            self.qhull.smt_hull_simplify(timeout=self.smt_timeout)
+        elif self.smt_iter:
+            self.qhull.smt_facet_simplify(timeout=self.smt_timeout)
+
+    @property
+    def complexity(self):
+        return self.qhull.complexity()
+
     def pach(self):
         logger.debug('Starting parsing')
         self.parse()
         logger.debug('Starting modeling')
         self.model()
+        # Remove unnecesary facets wrt neg traces (if any)
         self.remove_unnecesary()
+        # Remove unnecesary facets wrt neg traces
+        # Apply smt_simplify.
+        # Options are on the hull level, on every facet or none
+        self.smt_simplify()
+        return self.complexity
 
     def generate_pnml(self, filename=None):
         if not filename:
@@ -287,9 +299,9 @@ class PacH(object):
         transitions = '\n      <!-- Transitions -->\n'
         transitions_list = []
         for idx in xrange(self.dim):
-            if idx in self.event_dictionary:
-                transition_id = self.event_dictionary.get(idx).replace(' ','_')
-                transition_name = self.event_dictionary.get(idx)
+            if idx in self.reversed_dictionary:
+                transition_id = self.reversed_dictionary.get(idx).replace(' ','_')
+                transition_name = self.reversed_dictionary.get(idx)
             else:
                 transition_id = 'trans-%04d'%(idx+1)
                 transition_name = 'Transition %04d'%(idx+1)
@@ -324,8 +336,8 @@ class PacH(object):
                 if not val:
                     continue
 
-                if tr_id in self.event_dictionary:
-                    transition_id = self.event_dictionary.get(tr_id).replace(' ','_')
+                if tr_id in self.reversed_dictionary:
+                    transition_id = self.reversed_dictionary.get(tr_id).replace(' ','_')
                 else:
                     transition_id = 'trans-%04d'%(tr_id+1)
                 if abs(val) != 1:
@@ -389,8 +401,8 @@ class PacH(object):
                     '      </place>'%(place_id,place_name,place_value))
 
 
-            if tr_id in self.event_dictionary:
-                transition_id = self.event_dictionary.get(tr_id).replace(' ','_')
+            if tr_id in self.reversed_dictionary:
+                transition_id = self.reversed_dictionary.get(tr_id).replace(' ','_')
             else:
                 transition_id = 'trans-%04d'%(tr_id)
             if tr_id in needs_preset:
@@ -422,111 +434,6 @@ class PacH(object):
         with open(filename,'w') as ffile:
             ffile.write(pnml)
         logger.info('Generated the PNML %s', filename)
-        return True
-
-    # Support for Z3 SMT-Solver
-    def smt_solution(self):
-        solver = z3.Solver()
-        solver.set("soft_timeout", self.smt_timeout)
-
-        diff_sol = False
-        non_trivial = False
-        A1 = True
-        A2 = True
-
-        for p_id, place in enumerate(self._facets):
-
-            b = place.offset
-            z3_b = z3.Int("b" + str(p_id))
-
-            if b > 0:
-                solver.add(z3_b >= 0)
-                solver.add(z3_b <= b)
-            elif b< 0:
-                solver.add(z3_b <= 0)
-                solver.add(z3_b >= b)
-            else:
-                solver.add(z3_b == 0)
-
-            pos_x = True
-
-            simple = sum(abs(x) for x in place.normal) <= 1
-            diff_sig = reduce(lambda x,y:x*y, [x + 1 for x in place.normal]) < 1
-
-            if not simple and diff_sig:
-                some_produce = False
-                some_consume = False
-
-            h1 = b
-            h2 = z3_b
-            variables = []
-
-            for t_id, val in enumerate(place.normal):
-                z3_val = z3.Int("a" + str(p_id) + "," + str(t_id))
-                x = z3.Int("x" + str(t_id))
-                variables.append(x)
-                pos_x = z3.And(pos_x, x >= 0)
-                if val:
-                    if val > 0:
-                        solver.add(0 <= z3_val)
-                        solver.add(z3_val <= val)
-                    else:
-                        solver.add(val <= z3_val)
-                        solver.add(z3_val <= 0)
-                    if not simple and diff_sig:
-                        some_consume = z3.Or(some_consume, z3_val < 0)
-                        some_produce = z3.Or(some_produce, z3_val > 0)
-                    non_trivial = z3.Or(non_trivial, z3_val != 0)
-                    diff_sol = z3.Or(diff_sol, z3_val != val)
-                    h1 = h1 + val * x
-                    h2 = h2 + z3_val * x
-                else:
-                    solver.add(z3_val == 0)
-            if not simple and diff_sig:
-                solver.add(z3.simplify(some_consume))
-                solver.add(z3.simplify(some_produce))
-            A1 = z3.And(A1, h1 <= 0)
-            A2 = z3.And(A2, h2 <= 0)
-        solver.add(z3.simplify(non_trivial))
-        solver.add(z3.simplify(diff_sol))
-        solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, A1), A2))))
-        sol = solver.check()
-        if sol == z3.unsat or sol == z3.unknown:
-            return False
-        else:
-            return solver.model()
-
-    def simplify(self, sol):
-        facets = []
-        if not sol:
-            for p_id, place in enumerate(self._facets):
-                normal = []
-                b = int(str(sol[z3.Int("b" + str(p_id))]))
-                for t_id, val in enumerate(place.normal):
-                    z3_val = z3.Int("a" + str(p_id) + "," + str(t_id))
-                    normal.append(int(str(sol[z3_val])))
-                if sum(abs(x) for x in normal) != 0:
-                    f = Halfspace(normal, b, False)
-                    if not f in facets:
-                        facets.append(f)
-            self._facets = facets
-            return self
-        else:
-            return self
-
-    def op_simplify(self):
-        sol = self.smt_solution()
-        while sol != False:
-            self = self.simplify(sol)
-            sol = self.smt_solution()
-        return self
-
-    def smt_simplify(self):
-        if self.smt_matrix:
-            self.op_simplify()
-        elif self.smt_iter:
-            for facet in self.facets:
-                facet.op_simplify()
         return True
 
 if __name__ == '__main__':

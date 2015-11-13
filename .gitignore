@@ -58,3 +58,6 @@ target/
 
 # Autoenv
 .env
+
+# La salida del pach.py
+*-complexities.out
