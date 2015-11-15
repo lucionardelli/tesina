@@ -1,7 +1,7 @@
 #!/bin/sh
 # Hay que hacerlo lindo a esto. Por ahora, totalmente AD-HOC
-printf '\n\n> SIN SMT <' >> smt-iterative-complexities.out
-date >> smt-iterative-complexities.out
+printf '\n\n> SIN SMT CON TRAZAS NEGATIVAS<' >> no-smt-complexities.out
+date >> no-smt-complexities.out
 
 # Sin poyección ni sampling
 echo '> Comienza Sin proyec ni sampling'

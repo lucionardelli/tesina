@@ -5,10 +5,6 @@ printf '\n\n> SMT ITERATIVO <' >> smt-iterative-complexities.out
 date >> smt-iterative-complexities.out
 
 echo '> Comienza Sin proyec ni sampling'
-echo '> Comienza illustrative_example.xes'
-./pach.py ../xes_logs/illustrative_example.xes --smt-iter 30 >> smt-iterative-complexities.out
-echo '> Comienza running-example-just-two-cases.xes'
-./pach.py ../xes_logs/running-example-just-two-cases.xes --smt-iter 30 >> smt-iterative-complexities.out
 echo '> Comienza choice.xes'
 ./pach.py ../xes_logs/choice.xes --smt-iter 30 >> smt-iterative-complexities.out
 echo '> Comienza confDimBlocking.xes'
@@ -33,13 +29,9 @@ echo '> Comienza cycles5_2.xes'
 ./pach.py ../xes_logs/cycles5_2.xes --projection --smt-iter 30 >> smt-iterative-complexities.out
 echo '> Comienza a42.xes'
 ./pach.py ../xes_logs/a42.xes --projection 10 --smt-iter 30 >> smt-iterative-complexities.out
-echo '> Comienza a42.xes SIN LÍMITE DE PROJ PERO SIN CHECK'
-./pach.py ../xes_logs/a42.xes --projection 10 --smt-iter 30 >> smt-iterative-complexities.out
 echo '> Comienza t32.xes'
-./pach.py ../xes_logs/t32.xes --projection 10  --smt-iter 30 >> smt-iterative-complexities.out
-echo '> Comienza t32.xes LÍMITE DE PROJ PERO SIN CHECK'
 ./pach.py ../xes_logs/t32.xes --projection --smt-iter 30 >> smt-iterative-complexities.out
-echo '> Comienza Peterson-PT-2.xes SIN CHECK'
+echo '> Comienza Peterson-PT-2.xes'
 ./pach.py ../xes_logs/Peterson-PT-2.xes --projection 10 --smt-iter 30 >> smt-iterative-complexities.out
 echo '> Comienza telecom.xes'
 ./pach.py ../xes_logs/telecom.xes --projection --smt-iter 30 >> smt-iterative-complexities.out
