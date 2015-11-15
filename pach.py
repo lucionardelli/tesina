@@ -8,15 +8,18 @@ from utils import get_positions, rotate_dict
 import time
 import numpy as np
 from random import sample
+from datetime import datetime
+import os
 
 from halfspace import Halfspace
 from custom_exceptions import CannotGetHull, WrongDimension, CannotIntegerify
 from sampling import sampling
 from projection import projection
+from stopwatch_wrapper import stopwatch
 
 from config import logger
-class PacH(object):
 
+class PacH(object):
     def __init__(self, filename, verbose=False,
             samp_num=1, samp_size=None,
             proj_size=None, proj_connected=True,
@@ -44,11 +47,13 @@ class PacH(object):
         self.npv_array = np.array([])
         # Inicialización de varibales
         self.dim = 0
-        if smt_iter:
-            logger.info('Will apply iterative SMT simplifications')
-        self.smt_iter = smt_iter
         if smt_matrix:
             logger.info('Will apply SMT simplification')
+        elif smt_iter:
+            logger.info('Will apply iterative SMT simplifications')
+        else:
+            logger.info('No SMT simplification')
+        self.smt_iter = smt_iter
         self.smt_matrix = smt_matrix
         self.smt_timeout = smt_timeout
         # Sampling configuration
@@ -74,7 +79,18 @@ class PacH(object):
         self.proj_connected = proj_connected
         # Do Sanity check after projectiong?
         self.sanity_check = sanity_check
+        pp_file = os.path.basename(filename)
+        if nfilename:
+            pp_nfile = os.path.basename(nfilename)
+        else:
+            pp_nfile = ''
 
+        self.output = { 'positive': pp_file,
+                'negative': pp_nfile,
+                'time': '%s'%datetime.now(),
+                'times': {}}
+
+    @stopwatch
     def parse_negatives(self):
         if not self.nfilename:
             logger.error('No se ha especificado un archivo '\
@@ -105,6 +121,7 @@ class PacH(object):
             print '# RESULTADO  obtenido en: ', elapsed_time
             print '#'*40+'\n'
 
+    @stopwatch
     def parse_traces(self):
         if self.verbose:
             print 'Starting parse\n'
@@ -188,22 +205,25 @@ class PacH(object):
     def facets(self):
         return self.qhull.facets
 
+    @stopwatch
     @sampling
     @projection
     def get_qhull(self, points):
         points = set(map(tuple, points))
         qhull = Qhull(points, neg_points=list(self.npv_set))
         qhull.compute_hiperspaces()
+        self.output['times'].update(qhull.output.get('times',{}))
         return qhull
 
-    def remove_unnecesary(self):
-        if self.nfilename:
+    @stopwatch
+    def no_smt_simplify(self):
+        if self.nfilename and not self.smt_matrix and not self.smt_iter:
             logger.debug('Starting to simplify model from negative points')
             if self.verbose:
                 print 'Starting to simplify model from negative points\n'
                 start_time = time.time()
             old_len = len(self.facets)
-            self.qhull.simplify(max_coef=self.max_coef)
+            self.qhull.no_smt_simplify(max_coef=self.max_coef)
             removed = len(self.facets) - old_len
             if removed:
                 logger.debug('We removed %d facets without allowing negative points',removed)
@@ -241,6 +261,7 @@ class PacH(object):
             self.qhull.smt_hull_simplify(timeout=self.smt_timeout)
         elif self.smt_iter:
             self.qhull.smt_facet_simplify(timeout=self.smt_timeout)
+        self.output['times'].update(self.qhull.output.get('times',{}))
 
     @property
     def complexity(self):
@@ -252,17 +273,21 @@ class PacH(object):
         logger.debug('Starting modeling')
         self.model()
         # Remove unnecesary facets wrt neg traces (if any)
-        self.remove_unnecesary()
+        self.no_smt_simplify()
         # Remove unnecesary facets wrt neg traces
         # Apply smt_simplify.
         # Options are on the hull level, on every facet or none
         self.smt_simplify()
-        return self.complexity
+        complexity = self.complexity
+        self.output['complexity'] = complexity
+        self.generate_output_file()
+        return complexity
 
-    def get_def_pnml_name(self):
+    def get_def_pnml_name(self, extension='pnml'):
         # Tomo el archivo de entrada y le quito la extensión '.xes' si la tiene
-        def_name = (self.filename.endswith('.xes') and self.filename[:-4])\
-                or self.filename or ''
+        pp_file = os.path.basename(self.filename)
+        def_name = (pp_file.endswith('.xes') and pp_file[:-4])\
+                or pp_file or ''
         # Genero un nombre por default
         opts = ''
         if self.samp_num > 1:
@@ -271,19 +296,21 @@ class PacH(object):
                 opts += '_%d'%(self.samp_size)
         if self.proj_size is not None:
             opts += '_p%d'%(self.proj_size)
-        def_name = '%s.pnml'%(def_name+opts)
+        def_name = '%s.%s'%(def_name+opts,extension)
         return def_name
 
+    @stopwatch
     def generate_pnml(self, filename=None):
         if not filename:
             filename = self.get_def_pnml_name()
+        pp_file = os.path.basename(filename)
         preamble = '<?xml version="1.0" encoding="UTF-8"?>\n'\
                    '<pnml xmlns="http://www.pnml.org/version-2009/grammar/pnml">\n'\
                    '  <net id="exit_net" type="http://www.pnml.org/version-2009/grammar/ptnet">\n'\
                    '    <name>\n'\
                    '      <text>"%s" Generater automagically with PacH</text>\n'\
                    '    </name>\n'\
-                   '    <page id="page">\n'%(self.filename)
+                   '    <page id="page">\n'%(pp_file)
 
         # Comenzamos con los Places (i.e. un place por cada inecuación)
         nbr_places = 0
@@ -447,6 +474,58 @@ class PacH(object):
         logger.info('Generated the PNML %s', filename)
         return True
 
+    def generate_output_file(self):
+        outfile = self.get_def_pnml_name(extension='out')
+        output = """
+Statistic of {positive}: with negative traces from {negative}
+    benchmark       ->  {benchmark}
+    positive        ->  {positive}
+    negative        ->  {negative}
+    complexity      ->  {complexity}
+    exec_time       ->  {time}
+    overall_time    ->  {overall_time}
+    details
+        parse_traces    ->  {parse_traces}"""
+        if self.nfilename:
+            output +="""\n        parse_negatives ->  {parse_negatives}"""
+        if self.samp_num > 1:
+            output +="""\n        do_sampling     ->  {do_sampling}"""
+        if self.proj_size is not None:
+            output +="""\n        do_projection   ->  {do_projection}"""
+
+        output +="""\n        convexHull      ->  {compute_hiperspaces}"""
+
+        if self.smt_matrix:
+            benchmark = 'Matrix SMT Simplification'
+            outfile = 'MatrixSMT_' + outfile
+            output +="""\n        shift&rotate    ->  {smt_hull_simplify}"""
+        elif self.smt_iter:
+            benchmark = 'Iterative SMT Simplification'
+            outfile = 'IterativeSMT__' + outfile
+            output +="""\n        shift&rotate    ->  {smt_facet_simplify}"""
+        else:
+            benchmark = 'No SMT Simplification'
+            outfile = 'NoSMT_' + outfile
+            output +="""\n        simplify        ->  {no_smt_simplify}"""
+        overall = 0
+        for k,val in self.output.get('times',{}).items():
+            overall += val
+
+        self.output['complexity'] = self.complexity
+        self.output['benchmark'] = benchmark
+        self.output['overall_time'] = overall
+        def flatten(dictionary):
+            ret = {}
+            for k,v in dictionary.items():
+                if isinstance(v,dict):
+                    ret.update(flatten(v))
+                else:
+                    ret[k] = v
+            return ret
+        out_dict = flatten(self.output)
+        with open(outfile,'w') as ffile:
+            ffile.write(output.format(**out_dict))
+
 if __name__ == '__main__':
     import sys, traceback, pdb
     from mains import pach_main
@@ -456,5 +535,4 @@ if __name__ == '__main__':
         type, value, tb = sys.exc_info()
         traceback.print_exc()
         #pdb.post_mortem(tb)
-
 

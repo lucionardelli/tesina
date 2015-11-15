@@ -314,6 +314,7 @@ def comparator_main():
             for k,v in complexity.items():
                 print '\t%s\t\t -> %s'%(k,v)
             comparator.generate_pnml()
+            comparator.generate_outputs()
         except Exception, err:
             ret = 1
             if hasattr(err, 'message'):

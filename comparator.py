@@ -25,13 +25,15 @@ class Comparator(object):
             sanity_check=sanity_check)
         self.pach.parse()
 
-        self.qhull_no_smt = copy.deepcopy(self.pach.qhull)
+        qhull = self.pach.qhull
+        # Hull for NO SMT
+        self.qhull_no_smt = copy.deepcopy(qhull)
         # Hull for SMT iterative simp
         self.timeout_smt_iter = smt_timeout_iter
-        self.qhull_smt_iter = copy.deepcopy(self.pach.qhull)
+        self.qhull_smt_iter = copy.deepcopy(qhull)
         # Hull for SMT matrix simp
         self.timeout_smt_matrix = smt_timeout_matrix
-        self.qhull_smt_matrix = copy.deepcopy(self.pach.qhull)
+        self.qhull_smt_matrix = copy.deepcopy(qhull)
 
     def neg_simp_no_smt(self):
         # No smt simplification
@@ -39,7 +41,7 @@ class Comparator(object):
             logger.info('NO-SMT: Starting to simplify model from negative points')
             qhull = self.qhull_no_smt
             old_len = len(qhull.facets)
-            qhull.simplify(max_coef=self.pach.max_coef)
+            qhull.no_smt_simplify(max_coef=self.pach.max_coef)
             removed = len(qhull.facets) - old_len
             if removed:
                 logger.info('NO-SMT: We removed %d facets without allowing negative points',removed)
@@ -96,6 +98,31 @@ class Comparator(object):
         self.neg_simp_smt_iterative()
         self.neg_simp_smt_matrix()
         return self.complexity()
+
+    def generate_outputs(self):
+        # For every benchmark, generate the output
+        qhull = self.qhull_no_smt
+        self.pach.output.get('times',{}).update(qhull.output.get('times',{}))
+        self.pach.qhull = qhull
+        self.pach.smt_matrix = False
+        self.pach.smt_iter = False
+        self.pach.generate_output_file()
+        logger.info('Generated output for NO SMT simplification')
+        qhull = self.qhull_smt_iter
+        self.pach.output.get('times',{}).update(qhull.output.get('times',{}))
+        self.pach.qhull = qhull
+        self.pach.smt_matrix = False
+        self.pach.smt_iter = True
+        self.pach.generate_output_file()
+        logger.info('Generated output for Iterative SMT simplification')
+        qhull = self.qhull_smt_matrix
+        self.pach.output.get('times',{}).update(qhull.output.get('times',{}))
+        self.pach.qhull = qhull
+        self.pach.smt_matrix = True
+        self.pach.smt_iter = False
+        self.pach.generate_output_file()
+        logger.info('Generated output for Matrix SMT simplification')
+        return True
 
 if __name__ == '__main__':
     import sys, traceback, pdb

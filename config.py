@@ -9,17 +9,15 @@ LCM_LIMIT=5000
 # Tolerance for equality comparision
 TOLERANCE =0.0001
 
-#Logging config
+#General Logging config
 
 LOG_CONFIG = {
     'level': logging.INFO,
     'filename': '/var/log/pach.log',
-# Solo interesa el ultimo log
     'filemode': 'a',
     'format': '%(asctime)s %(levelname)-8s %(message)s',
     'datefmt': '%a, %d %b %Y %H:%M:%S',
 }
-
 
 logging.basicConfig(**LOG_CONFIG)
 logger = logging.getLogger('PacHlogger')

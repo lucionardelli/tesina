@@ -42,4 +42,5 @@ echo '> Comienza t32.xes'
 #./comparator.py ../xes_logs/telecom.xes --projection --smt-matrix 300 --smt-iter 30  --negative ../negative_logs/telecom.negatives.xes >> comparative.complexities.out
 #echo '> Comienza complex.enc.xes'
 #./comparator.py ../xes_logs/complex.enc.xes --projection 10 --smt-matrix 300 --smt-iter 30  --negative ../negative_logs/complex.enc.negatives.xes >> comparative.complexities.out
-mv ../xes_logs/*.pnml ../pnml/comparator/negatives/
+mv ./*.pnml ../pnml/comparator/
+mv ./*.out ../statistics/comparator/

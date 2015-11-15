@@ -4,6 +4,8 @@ from pyhull import qconvex
 from utils import get_positions
 from halfspace import Halfspace
 from custom_exceptions import IncorrectOutput, CannotGetHull, LostPoints
+from stopwatch_wrapper import stopwatch
+
 import sys
 from redirect_output import stderr_redirected
 try:
@@ -21,6 +23,7 @@ class Qhull(object):
         self.__qhull = None
         self.facets = []
         self.verbose = verbose
+        self.output = {}
 
     def __contains__(self, point):
         return self.is_inside(point)
@@ -44,6 +47,7 @@ class Qhull(object):
             raise IncorrectOutput()
         return (dim, facets_nbr, facets)
 
+    @stopwatch
     def compute_hiperspaces(self):
         # La característica heurística al buscar conexiones entre
         # diferentes clusters hace que pueda fallar
@@ -80,6 +84,7 @@ class Qhull(object):
             for facet in self.facets:print facet
         return self.dim
 
+    @stopwatch
     def prepare_negatives(self):
         # Simplifation made to (at most) with same number of
         # negative and positive points
@@ -134,8 +139,8 @@ class Qhull(object):
                 outside.append(point)
         return ret
 
+    @stopwatch
     def all_in(self, points):
-        #NOTE
         # Esto es para chequear que no dejando a nadia afuera
         # hace todo más lento en ejemplos grandes
         logger.info('Sanity check: Are all points still valid?')
@@ -200,7 +205,8 @@ class Qhull(object):
                 break
         return ret
 
-    def simplify(self, max_coef=10):
+    @stopwatch
+    def no_smt_simplify(self, max_coef=10):
         facets = list(self.facets)
         popped = 0
         for idx,facet in enumerate(self.facets):
@@ -237,6 +243,7 @@ class Qhull(object):
         return complexity
 
     # Support for Z3 SMT-Solver
+    @stopwatch
     def smt_solution(self,timeout):
         solver = z3.Solver()
         solver.set("soft_timeout", timeout)
@@ -312,6 +319,7 @@ class Qhull(object):
             ret = solver.model()
         return ret
 
+    @stopwatch
     def smt_simplify(self, sol):
         facets = []
         if sol:
@@ -329,12 +337,14 @@ class Qhull(object):
                         facets.append(f)
             self.facets = facets
 
+    @stopwatch
     def smt_hull_simplify(self,timeout=0):
         sol = self.smt_solution(timeout)
         while sol:
             self.smt_simplify(sol)
             sol = self.smt_solution(timeout)
 
+    @stopwatch
     def smt_facet_simplify(self,timeout=0):
         for facet in self.facets:
             facet.smt_facet_simplify(neg_points=self.neg_points,timeout=timeout)

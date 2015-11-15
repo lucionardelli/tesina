@@ -5,9 +5,11 @@ from corrmatrix import CorrMatrix
 #from kmeans import two_means
 from kmeans_plus_plus import two_means
 
+from stopwatch_wrapper import stopwatch
 from config import *
 
 def projection(func):
+    @stopwatch
     def do_projection(self, points, *args, **kwargs):
         # Calculamos la matrix de correlaciones
         points = np.array(list(points))
