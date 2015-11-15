@@ -476,6 +476,8 @@ class PacH(object):
 
     def generate_output_file(self):
         outfile = self.get_def_pnml_name(extension='out')
+        times = self.output.get('times',{})
+        overall = 0
         output = """
 Statistic of {positive}: with negative traces from {negative}
     benchmark       ->  {benchmark}
@@ -488,28 +490,33 @@ Statistic of {positive}: with negative traces from {negative}
         parse_traces    ->  {parse_traces}"""
         if self.nfilename:
             output +="""\n        parse_negatives ->  {parse_negatives}"""
+            overall += times.get('parse_negatives')
         if self.samp_num > 1:
             output +="""\n        do_sampling     ->  {do_sampling}"""
+            overall += times.get('do_sampling')
         if self.proj_size is not None:
             output +="""\n        do_projection   ->  {do_projection}"""
-
+            overall += times.get('do_projection')
         output +="""\n        convexHull      ->  {compute_hiperspaces}"""
 
         if self.smt_matrix:
             benchmark = 'Matrix SMT Simplification'
             outfile = 'MatrixSMT_' + outfile
             output +="""\n        shift&rotate    ->  {smt_hull_simplify}"""
+            overall += times.get('smt_hull_simplify')
         elif self.smt_iter:
             benchmark = 'Iterative SMT Simplification'
             outfile = 'IterativeSMT__' + outfile
             output +="""\n        shift&rotate    ->  {smt_facet_simplify}"""
+            overall += times.get('smt_facet_simplify')
         else:
             benchmark = 'No SMT Simplification'
             outfile = 'NoSMT_' + outfile
             output +="""\n        simplify        ->  {no_smt_simplify}"""
-        overall = 0
-        for k,val in self.output.get('times',{}).items():
-            overall += val
+            overall += times.get('no_smt_simplify')
+
+        for k in ('parse_traces', 'compute_hiperspaces'):
+            overall += times.get(k,0)
 
         self.output['complexity'] = self.complexity
         self.output['benchmark'] = benchmark
