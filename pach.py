@@ -174,8 +174,9 @@ class PacH(object):
 
     @property
     def qhull(self):
-        self._qhull = self._qhull or self.get_qhull(self.pv_array)
-        self._qhull.prepare_negatives()
+        if not self._qhull:
+            self._qhull = self.get_qhull(self.pv_array)
+            self._qhull.prepare_negatives()
         return self._qhull
 
     @property
@@ -230,7 +231,7 @@ class PacH(object):
             print '# RESULTADO  obtenido en: ', elapsed_time
             print '#'*40+'\n'
 
-    def smt_simplify(self, smt_simp_type=None):
+    def smt_simplify(self):
         if self.smt_matrix:
             self.qhull.smt_hull_simplify(timeout=self.smt_timeout)
         elif self.smt_iter:

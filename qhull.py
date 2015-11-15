@@ -89,8 +89,8 @@ class Qhull(object):
             if npoint not in self:
                 actual_neg_points.append(npoint)
                 positive_points -= 1
-            if positive_points == 0:
-                break
+            #if positive_points == 0:
+            #    break
         self.net_points = actual_neg_points
 
 
