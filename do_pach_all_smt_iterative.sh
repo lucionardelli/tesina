@@ -20,8 +20,6 @@ echo '> Comienza log1.xes'
 ./pach.py ../xes_logs/log1.xes --projection 11 --smt-iter 30
 echo '> Comienza a32.xes'
 ./pach.py ../xes_logs/a32.xes --projection 8 --smt-iter 30
-echo '> Comienza Angiogenesis-PT-01.xes'
-./pach.py ../xes_logs/Angiogenesis-PT-01.xes --projection 8 --sampling 5 500 --smt-iter 30
 echo '> Comienza DatabaseWithMutex-PT-02.xes'
 ./pach.py ../xes_logs/DatabaseWithMutex-PT-02.xes --projection --smt-iter 30
 echo '> Comienza cycles5_2.xes'

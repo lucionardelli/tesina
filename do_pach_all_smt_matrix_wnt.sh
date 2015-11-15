@@ -35,12 +35,11 @@ echo '> Comienza DatabaseWithMutex-PT-02.xes'
 ./pach.py ../xes_logs/DatabaseWithMutex-PT-02.xes --projection --smt-matrix 300  --negative ../negative_logs/DatabaseWithMutex-PT-02.negatives.xes
 echo '> Comienza t32.xes'
 ./pach.py ../xes_logs/t32.xes --projection 10  --smt-matrix 300  --negative ../negative_logs/t32.negatives.xes
-#Trazas negativas muy grandes, no pueden siquiera parsearse
-#echo '> Comienza a42.xes'
-#./pach.py ../xes_logs/a42.xes --projection 10 --smt-matrix 300  --negative ../negative_logs/a42.negatives.xes
-#echo '> Comienza telecom.xes'
-#./pach.py ../xes_logs/telecom.xes --projection --smt-matrix 300  --negative ../negative_logs/telecom.negatives.xes
-#echo '> Comienza complex.enc.xes'
-#./pach.py ../xes_logs/complex.enc.xes --projection 8 --smt-matrix 300  --negative ../negative_logs/complex.enc.negatives.xes
+echo '> Comienza a42.xes'
+./pach.py ../xes_logs/a42.xes --projection 10 --smt-matrix 300  --negative ../negative_logs/a42.negatives.xes
+echo '> Comienza telecom.xes'
+./pach.py ../xes_logs/telecom.xes --projection --smt-matrix 300  --negative ../negative_logs/telecom.negatives.xes
+echo '> Comienza complex.enc.xes'
+./pach.py ../xes_logs/complex.enc.xes --projection 8 --smt-matrix 300  --negative ../negative_logs/complex.enc.negatives.xes
 mv ./*.pnml ../pnml/smt_matrix/negatives/
 mv ./*.out ../statistics/smt_matrix/negatives/
