@@ -309,9 +309,6 @@ def comparator_main():
                 pdb.set_trace()
             comparator = Comparator(filename, **args)
             complexity = comparator.compare()
-            print '%s'%(filename)
-            for k,v in complexity.items():
-                print '\t%s\t\t -> %s'%(k,v)
             comparator.generate_pnml()
             comparator.generate_outputs()
         except Exception, err:
