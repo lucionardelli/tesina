@@ -215,11 +215,12 @@ class Halfspace(Halfspace):
         for np in list(neg_points)[:min(100,len(neg_points))]:
             smt_np = False
             ineq_np = self.offset
-            for t_id, val in enumerate(place.normal):
-                z3_var = z3.Int("a" + str(p_id) + "," + str(t_id))
+            for t_id, val in enumerate(self.normal):
+                z3_var = z3.Int("a" + str(t_id))
                 ineq_np = ineq_np + z3_var * np[t_id]
             smt_np = z3.simplify(z3.Or(smt_np, ineq_np < 0))
             solver.add(smt_np)
+
         sol = solver.check()
         if sol == z3.unsat or sol == z3.unknown:
             ret = False

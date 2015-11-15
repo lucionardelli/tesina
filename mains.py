@@ -7,6 +7,7 @@ from os.path import isfile
 from pach import PacH
 from qhull import Qhull
 from parser import XesParser, AdHocParser
+from comparator import Comparator
 from negative_parser import NegativeParser
 
 def pach_main():
@@ -222,6 +223,97 @@ def negative_parser_main():
                     len(obj.pv_set), obj.dim)
             if '--verbose' in sys.argv:
                 print "#"*15
+        except Exception, err:
+            ret = 1
+            if hasattr(err, 'message'):
+                print 'Error: ', err.message
+            else:
+                print 'Error: ', err
+            raise err
+        return ret
+
+def comparator_main():
+    usage = 'Usage: ./comparator <LOG filename> [--debug]'\
+        '\n\t[--negative <Negative points filename>] [max_coeficient]]'\
+        '\n\t[--sampling [<number of samplings>] [<sampling size>]]'\
+        '\n\t[--projection [<max group size>] [<connected model>]]'\
+        '\n\t[--smt-matrix [<timeout>]]'\
+        '\n\t[--smt-iter [<timeout>]]'
+    if not check_argv(sys.argv, minimum=1, maximum=16):
+        print usage
+        ret = -1
+    else:
+        ret = 0
+        args = {}
+        try:
+            filename = sys.argv[1]
+            if not (filename.endswith('.xes') or filename.endswith('.txt')):
+                print filename, ' does not end in .xes not .txt. It should...'
+                raise Exception('Filename does not end in .xes')
+            if not isfile(filename):
+                raise Exception("El archivo especificado no existe")
+            if '--sampling' in sys.argv or '-s' in sys.argv:
+                samp_idx = '-s' in sys.argv and sys.argv.index('-s') or\
+                    sys.argv.index('--sampling')
+                try:
+                    args['samp_num'] = int(sys.argv[samp_idx+1])
+                except:
+                    pass
+                try:
+                    args['samp_size'] = int(sys.argv[samp_idx+2])
+                except:
+                    pass
+            if '--projection' in sys.argv or '-p' in sys.argv:
+                # None indicates not to do projection.
+                # False indicates no limit
+                args['proj_size'] = False
+                proj_idx = '-p' in sys.argv and sys.argv.index('-p') or\
+                    sys.argv.index('--projection')
+                try:
+                    args['proj_size'] = int(sys.argv[proj_idx+1])
+                except:
+                    pass
+                try:
+                    args['proj_connected'] = int(sys.argv[proj_idx+2])
+                except:
+                    pass
+            if '--negative' in sys.argv or '-n' in sys.argv:
+                nidx = '-n' in sys.argv and sys.argv.index('-n') or\
+                    sys.argv.index('--negative')
+                nfilename = sys.argv[nidx+1]
+                if not (nfilename.endswith('.xes') or nfilename.endswith('.txt')):
+                    print nfilename, ' does not end in .xes not .txt. It should...'
+                    raise Exception('Filename does not end in .xes')
+                if not isfile(nfilename):
+                    raise Exception("El archivo especificado no existe")
+                args['nfilename'] = nfilename
+                try:
+                    args['max_coef'] = int(sys.argv[nidx+2])
+                except:
+                    pass
+            if '--smt-matrix' in sys.argv or '-smt-m' in sys.argv:
+                smt_idx = '-smt-m' in sys.argv and sys.argv.index('-smt-m') or\
+                    sys.argv.index('--smt-matrix')
+                try:
+                    args['smt_timeout_matrix'] = int(sys.argv[smt_idx+1])
+                except:
+                    pass
+            elif '--smt-iter' in sys.argv or '-smt-i' in sys.argv:
+                smt_idx = '-smt-i' in sys.argv and sys.argv.index('-smt-i') or\
+                    sys.argv.index('--smt-iter')
+                args['smt_iter'] = True
+                try:
+                    args['smt_timeout_iter'] = int(sys.argv[smt_idx+1])
+                except:
+                    pass
+            if '--debug' in sys.argv:
+                pdb.set_trace()
+            comparator = Comparator(filename, **args)
+            complexity = comparator.compare()
+            print '%s'%(filename)
+            for k,v in complexity.items():
+                print '\t%s\t\t -> %s'%(k,v)
+            comparator.generate_pnml()
         except Exception, err:
             ret = 1
             if hasattr(err, 'message'):

@@ -179,6 +179,11 @@ class PacH(object):
             self._qhull.prepare_negatives()
         return self._qhull
 
+    @qhull.setter
+    def qhull(self, qhull):
+        self._qhull = qhull
+        return self._qhull
+
     @property
     def facets(self):
         return self.qhull.facets
@@ -254,21 +259,24 @@ class PacH(object):
         self.smt_simplify()
         return self.complexity
 
+    def get_def_pnml_name(self):
+        # Tomo el archivo de entrada y le quito la extensión '.xes' si la tiene
+        def_name = (self.filename.endswith('.xes') and self.filename[:-4])\
+                or self.filename or ''
+        # Genero un nombre por default
+        opts = ''
+        if self.samp_num > 1:
+            opts += '_s%d'%(self.samp_num)
+            if self.samp_size:
+                opts += '_%d'%(self.samp_size)
+        if self.proj_size is not None:
+            opts += '_p%d'%(self.proj_size)
+        def_name = '%s.pnml'%(def_name+opts)
+        return def_name
+
     def generate_pnml(self, filename=None):
         if not filename:
-            # Tomo el archivo de entrada y le quito la extensión '.xes' si la tiene
-            def_name = (self.filename.endswith('.xes') and self.filename[:-4])\
-                    or self.filename or ''
-            # Genero un nombre por default
-            opts = ''
-            if self.samp_num > 1:
-                opts += '_s%d'%(self.samp_num)
-                if self.samp_size:
-                    opts += '_%d'%(self.samp_size)
-            if self.proj_size is not None:
-                opts += '_p%d'%(self.proj_size)
-            def_name = '%s.pnml'%(def_name+opts)
-            filename = def_name
+            filename = self.get_def_pnml_name()
         preamble = '<?xml version="1.0" encoding="UTF-8"?>\n'\
                    '<pnml xmlns="http://www.pnml.org/version-2009/grammar/pnml">\n'\
                    '  <net id="exit_net" type="http://www.pnml.org/version-2009/grammar/ptnet">\n'\

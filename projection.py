@@ -69,7 +69,6 @@ def projection(func):
                         logger.error("We couldn't  get even a single cluster!")
                         # Aunque la proyección sea mala,
                         # tenemos que hacer al menos una.
-                        cluster0,cluster1 = two_means(leader_row)
                         while len(cluster1) <= 1:
                             cluster1.append(max(cluster0))
                         logger.error('Using %s as the cluster closer to 1',cluster1)
