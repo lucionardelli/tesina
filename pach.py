@@ -175,6 +175,7 @@ class PacH(object):
     @property
     def qhull(self):
         self._qhull = self._qhull or self.get_qhull(self.pv_array)
+        self._qhull.prepare_negatives()
         return self._qhull
 
     @property
@@ -222,7 +223,7 @@ class PacH(object):
             print "Ended with MCH with ",len(facets)," halfspaces"
             print 'This are them:\n'
             for facet in facets:print facet
-        logger.debug("Ended with MCH with %s halfspaces",len(facets))
+        logger.info("Ended with MCH with %s halfspaces",len(facets))
         if self.verbose:
             elapsed_time = time.time() - start_time
             print 'Modeling done\n'
@@ -445,6 +446,6 @@ if __name__ == '__main__':
     except:
         type, value, tb = sys.exc_info()
         traceback.print_exc()
-        pdb.post_mortem(tb)
+        #pdb.post_mortem(tb)
 
 

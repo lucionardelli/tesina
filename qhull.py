@@ -70,12 +70,17 @@ class Qhull(object):
         except IncorrectOutput:
             logger.warning('Could not get hull')
             raise CannotGetHull()
+        logger.info('Found hull in dimension %s of %s facets',
+                dim,len(facets))
         self.dim = dim
         self.facets = facets
         if self.verbose:
             print "Computed MCH with ",facets_nbr," halfspaces"
             print 'This are them:\n'
             for facet in self.facets:print facet
+        return self.dim
+
+    def prepare_negatives(self):
         # Simplifation made to (at most) with same number of
         # negative and positive points
         positive_points = len(self.points)
@@ -86,7 +91,8 @@ class Qhull(object):
                 positive_points -= 1
             if positive_points == 0:
                 break
-        return self.dim
+        self.net_points = actual_neg_points
+
 
     def union(self, facets):
         """
@@ -332,5 +338,5 @@ if __name__ == '__main__':
     except:
         type, value, tb = sys.exc_info()
         traceback.print_exc()
-        pdb.post_mortem(tb)
+        #pdb.post_mortem(tb)
 
