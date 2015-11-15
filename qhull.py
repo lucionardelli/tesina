@@ -93,7 +93,6 @@ class Qhull(object):
             #    break
         self.net_points = actual_neg_points
 
-
     def union(self, facets):
         """
          Merge hull to a list of facets
@@ -296,6 +295,16 @@ class Qhull(object):
         solver.add(z3.simplify(non_trivial))
         solver.add(z3.simplify(diff_sol))
         solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, A1), A2))))
+        ## non negative point should be a solution
+        for np in list(self.neg_points)[:min(100,len(self.neg_points))]:
+            smt_np = False
+            for p_id, place in enumerate(self.facets):
+                ineq_np = place.offset
+                for t_id, val in enumerate(place.normal):
+                    z3_var = z3.Int("a" + str(p_id) + "," + str(t_id))
+                    ineq_np = ineq_np + z3_var * np[t_id]
+                smt_np = z3.simplify(z3.Or(smt_np, ineq_np < 0))
+            solver.add(smt_np)
         sol = solver.check()
         if sol == z3.unsat or sol == z3.unknown:
             ret = False
@@ -328,7 +337,7 @@ class Qhull(object):
 
     def smt_facet_simplify(self,timeout=0):
         for facet in self.facets:
-            facet.smt_facet_simplify(timeout)
+            facet.smt_facet_simplify(neg_points=self.neg_points,timeout=timeout)
 
 if __name__ == '__main__':
     import sys, traceback,pdb

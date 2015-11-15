@@ -151,7 +151,8 @@ class Halfspace(Halfspace):
             self.normal = map(int,self.normal)
 
     # Support for Z3 SMT-Solver
-    def smt_solution(self, timeout):
+    def smt_solution(self, timeout, neg_points=None):
+        neg_points = neg_points or []
         solver = z3.Solver()
         solver.set("soft_timeout", timeout)
 
@@ -210,6 +211,15 @@ class Halfspace(Halfspace):
         solver.add(z3.simplify(diff_sol))
         solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, h1 <= 0), h2 <= 0))))
 
+        ## non negative point should be a solution
+        for np in list(neg_points)[:min(100,len(neg_points))]:
+            smt_np = False
+            ineq_np = self.offset
+            for t_id, val in enumerate(place.normal):
+                z3_var = z3.Int("a" + str(p_id) + "," + str(t_id))
+                ineq_np = ineq_np + z3_var * np[t_id]
+            smt_np = z3.simplify(z3.Or(smt_np, ineq_np < 0))
+            solver.add(smt_np)
         sol = solver.check()
         if sol == z3.unsat or sol == z3.unknown:
             ret = False
@@ -229,8 +239,9 @@ class Halfspace(Halfspace):
                 self.normal = normal
                 self.offset = offset
 
-    def smt_facet_simplify(self, timeout=0):
-        sol = self.smt_solution(timeout)
+    def smt_facet_simplify(self, neg_points=None, timeout=0):
+        neg_points = neg_points or []
+        sol = self.smt_solution(timeout, neg_points=neg_points)
         while sol:
             self.simplify(sol)
-            sol = self.smt_solution(timeout)
+            sol = self.smt_solution(timeout, neg_points=neg_points)
