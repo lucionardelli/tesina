@@ -15,8 +15,9 @@ from config import logger
 
 class Qhull(object):
 
-    def __init__(self, points, verbose=False):
+    def __init__(self, points, neg_points=[], verbose=False):
         self.points = set(points)
+        self.neg_points = set(neg_points)
         self.__qhull = None
         self.facets = []
         self.verbose = verbose
@@ -75,6 +76,16 @@ class Qhull(object):
             print "Computed MCH with ",facets_nbr," halfspaces"
             print 'This are them:\n'
             for facet in self.facets:print facet
+        # Simplifation made to (at most) with same number of
+        # negative and positive points
+        positive_points = len(self.points)
+        actual_neg_points = []
+        for npoint in self.neg_points:
+            if npoint not in self:
+                actual_neg_points.append(npoint)
+                positive_points -= 1
+            if positive_points == 0:
+                break
         return self.dim
 
     def union(self, facets):
@@ -184,22 +195,29 @@ class Qhull(object):
                 break
         return ret
 
-    def simplify(self, npoints):
+    def simplify(self, max_coef=10):
         facets = list(self.facets)
         popped = 0
         for idx,facet in enumerate(self.facets):
-            # Creamos un dummy hull para guardar los facets
-            # menos el que se considera para eliminar
-            tmpqhull = Qhull(set())
-            tmpqhull.facets = list(set(facets)-set([facet]))
-            simplify = True
-            for npoint in npoints:
-                if npoint in tmpqhull:
-                    simplify = False
-                    break
-            if simplify:
-                facets.pop(idx - popped)
-                popped += 1
+            if max_coef and len([x for x in facet.normal + [facet.offset]\
+                    if abs(x) > max_coef]) > 0:
+                # If the max coef is inside the expected
+                # we don't try to remove it
+                # Creamos un dummy hull para guardar los facets
+                # menos el que se considera para eliminar
+                tmpqhull = Qhull(set())
+                tmpqhull.facets = list(set(facets)-set([facet]))
+                simplify = True
+                # Simplifation made to (at most) with same number of
+                # negative and positive points
+                positive_points = len(self.points)
+                for npoint in self.neg_points:
+                    if npoint in tmpqhull:
+                        simplify = False
+                        break
+                if simplify:
+                    facets.pop(idx - popped)
+                    popped += 1
         logger.info('Popped %d facets using negative info',popped)
         self.facets = facets
 

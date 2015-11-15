@@ -20,11 +20,11 @@ class PacH(object):
     def __init__(self, filename, verbose=False,
             samp_num=1, samp_size=None,
             proj_size=None, proj_connected=True,
-            nfilename=None,
+            nfilename=None, max_coef=10,
             smt_matrix=False,
             smt_iter=False,
             smt_timeout=0,
-            sanity_check=True):
+            sanity_check=False):
         # El archivo de trazas
         logger.info('Positive traces file: %s', filename)
         self.filename = filename
@@ -38,6 +38,7 @@ class PacH(object):
         self.pv_array = np.array([])
         self._qhull = None
         # Referentes a las trazas negativas
+        self.max_coef = max_coef
         self.npv_traces = []
         self.npv_set = set()
         self.npv_array = np.array([])
@@ -184,7 +185,7 @@ class PacH(object):
     @projection
     def get_qhull(self, points):
         points = set(map(tuple, points))
-        qhull = Qhull(points)
+        qhull = Qhull(points, neg_points=list(self.npv_set))
         qhull.compute_hiperspaces()
         return qhull
 
@@ -195,7 +196,7 @@ class PacH(object):
                 print 'Starting to simplify model from negative points\n'
                 start_time = time.time()
             old_len = len(self.facets)
-            self.qhull.simplify(self.npv_set)
+            self.qhull.simplify(max_coef=self.max_coef)
             removed = len(self.facets) - old_len
             if removed:
                 logger.debug('We removed %d facets without allowing negative points',removed)
@@ -445,4 +446,5 @@ if __name__ == '__main__':
         type, value, tb = sys.exc_info()
         traceback.print_exc()
         pdb.post_mortem(tb)
+
 

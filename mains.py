@@ -11,17 +11,18 @@ from negative_parser import NegativeParser
 
 def pach_main():
     usage = 'Usage: ./pach <LOG filename> [--debug][--verbose]'\
-        '\n\t[--negative <Negative points filename>] ]'\
+        '\n\t[--negative <Negative points filename>] [max_coeficient]]'\
         '\n\t[--sampling [<number of samplings>] [<sampling size>]]'\
         '\n\t[--projection [<max group size>] [<connected model>]]'\
         '\n\t[--smt-matrix [<timeout>]]'\
         '\n\t[--smt-iter [<timeout>]]'\
-        '\n\t[--no-sanity]'
-    if not check_argv(sys.argv, minimum=1, maximum=16):
+        '\n\t[--sanity-check]'
+    if not check_argv(sys.argv, minimum=1, maximum=17):
         print usage
         ret = -1
     else:
         ret = 0
+        args = {}
         try:
             filename = sys.argv[1]
             if not (filename.endswith('.xes') or filename.endswith('.txt')):
@@ -29,36 +30,31 @@ def pach_main():
                 raise Exception('Filename does not end in .xes')
             if not isfile(filename):
                 raise Exception("El archivo especificado no existe")
-            samp_num = 1
-            samp_size = None
             if '--sampling' in sys.argv or '-s' in sys.argv:
                 samp_idx = '-s' in sys.argv and sys.argv.index('-s') or\
                     sys.argv.index('--sampling')
                 try:
-                    samp_num = int(sys.argv[samp_idx+1])
+                    args['samp_num'] = int(sys.argv[samp_idx+1])
                 except:
                     pass
                 try:
-                    samp_size = int(sys.argv[samp_idx+2])
+                    args['samp_size'] = int(sys.argv[samp_idx+2])
                 except:
                     pass
-            proj_size = None
-            proj_connected = True
             if '--projection' in sys.argv or '-p' in sys.argv:
                 # None indicates not to do projection.
                 # False indicates no limit
-                proj_size = False
+                args['proj_size'] = False
                 proj_idx = '-p' in sys.argv and sys.argv.index('-p') or\
                     sys.argv.index('--projection')
                 try:
-                    proj_size = int(sys.argv[proj_idx+1])
+                    args['proj_size'] = int(sys.argv[proj_idx+1])
                 except:
                     pass
                 try:
-                    proj_connected = int(sys.argv[proj_idx+2])
+                    args['proj_connected'] = int(sys.argv[proj_idx+2])
                 except:
                     pass
-            nfilename = None
             if '--negative' in sys.argv or '-n' in sys.argv:
                 nidx = '-n' in sys.argv and sys.argv.index('-n') or\
                     sys.argv.index('--negative')
@@ -68,39 +64,34 @@ def pach_main():
                     raise Exception('Filename does not end in .xes')
                 if not isfile(nfilename):
                     raise Exception("El archivo especificado no existe")
-
-            smt_matrix = False
-            smt_iter = False
-            smt_timeout = 0
+                args['nfilename'] = nfilename
+                try:
+                    args['max_coef'] = int(sys.argv[nidx+2])
+                except:
+                    pass
             if '--smt-matrix' in sys.argv or '-smt-m' in sys.argv:
                 smt_idx = '-smt-m' in sys.argv and sys.argv.index('-smt-m') or\
                     sys.argv.index('--smt-matrix')
-                smt_matrix = True
+                args['smt_matrix'] = True
                 try:
-                    smt_timeout = int(sys.argv[smt_idx+1])
+                    args['smt_timeout'] = int(sys.argv[smt_idx+1])
                 except:
                     pass
             elif '--smt-iter' in sys.argv or '-smt-i' in sys.argv:
                 smt_idx = '-smt-i' in sys.argv and sys.argv.index('-smt-i') or\
                     sys.argv.index('--smt-iter')
-                smt_iter = True
+                args['smt_iter'] = True
                 try:
-                    smt_timeout = int(sys.argv[smt_idx+1])
+                    args['smt_timeout'] = int(sys.argv[smt_idx+1])
                 except:
                     pass
-            sc = True
-            if '--no-sanity' in sys.argv:
-                sc = False
+            if '--sanity-check' in sys.argv:
+                args['sanity_check'] = True
+            if '--verbose' in sys.argv:
+                args['verbose'] = True
             if '--debug' in sys.argv:
                 pdb.set_trace()
-            pach = PacH(filename, verbose=('--verbose' in sys.argv),
-                    samp_num=samp_num, samp_size=samp_size,
-                    proj_size=proj_size, proj_connected=proj_connected,
-                    nfilename=nfilename,
-                    smt_matrix=smt_matrix,
-                    smt_iter=smt_iter,
-                    smt_timeout=smt_timeout,
-                    sanity_check=sc)
+            pach = PacH(filename, **args)
             complexity = pach.pach()
             print '%s\t\t -> %s'%(filename,complexity)
             filename = None
