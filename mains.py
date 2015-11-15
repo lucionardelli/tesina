@@ -94,7 +94,6 @@ def pach_main():
                 pdb.set_trace()
             pach = PacH(filename, **args)
             complexity = pach.pach()
-            print '%s\t\t -> %s'%(filename,complexity)
             filename = None
             if '--output' in sys.argv or '-o' in sys.argv:
                 file_idx = '-o' in sys.argv and sys.argv.index('-o') or\
