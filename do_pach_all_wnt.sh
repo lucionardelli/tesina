@@ -1,5 +1,5 @@
-!/bin/sh
- Hay que hacerlo lindo a esto. Por ahora, totalmente AD-HOC
+#!/bin/sh
+# Hay que hacerlo lindo a esto. Por ahora, totalmente AD-HOC
 printf '\n\n> SIN SMT <' >> smt-iterative-complexities.out
 date >> smt-iterative-complexities.out
 
