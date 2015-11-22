@@ -116,3 +116,14 @@ class Comparator(object):
         logger.info('Generated output for Matrix SMT simplification')
         return True
 
+    def check_hull(self, log_file='', event_dictionary={}):
+        if not (log_file.endswith('.xes')):
+            print log_file, ' does not end in .xes. It should...'
+            raise Exception('Filename does not end in .xes')
+        if not isfile(log_file):
+            raise Exception("El archivo especificado no existe")
+        # For every benchmark, check that the hull accepts the positive log
+        for benchmark in ['no_smt', 'smt_iter', 'smt_matrix']:
+            qhull = getattr(self,'qhull_'+benchmark)
+            qhull.all_in_file(log_file, event_dictionary=obj.event_dictionary)
+        return True
