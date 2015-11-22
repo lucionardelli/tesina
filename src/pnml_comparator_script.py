@@ -27,6 +27,7 @@ def main(*args, **kwargs):
                 pdb.set_trace()
             for filename, arguments in parse_config(config_file):
                 comparator = ComparatorPnml(filename, **arguments)
+                comparator.check_hull()
                 complexity = comparator.compare()
                 logger.info('%s complexity -> %s',filename,complexity)
                 comparator.generate_pnml()
