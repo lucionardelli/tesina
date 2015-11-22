@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
 import copy
+from os.path import isfile
 
 from pach import PacH
 from config import logger
-
-
 class Comparator(object):
 
     def __init__(self, no_smt_qhull, iter_qhull, matrix_qhull,
@@ -125,5 +124,5 @@ class Comparator(object):
         # For every benchmark, check that the hull accepts the positive log
         for benchmark in ['no_smt', 'smt_iter', 'smt_matrix']:
             qhull = getattr(self,'qhull_'+benchmark)
-            qhull.all_in_file(log_file, event_dictionary=obj.event_dictionary)
+            qhull.all_in_file(log_file, event_dictionary=event_dictionary)
         return True

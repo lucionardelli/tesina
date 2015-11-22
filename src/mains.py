@@ -438,7 +438,6 @@ def pnml_main():
                 print 'Got qhull representation whith %s facets.'%(len(qhull.facets))
                 print 'This are them:\n'
                 for facet in qhull.facets:print facet
-            obj.petrinet.save('/tmp/asd')
         except Exception, err:
             ret = 1
             if hasattr(err, 'message'):

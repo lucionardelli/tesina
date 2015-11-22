@@ -82,8 +82,8 @@ class PetriNet(object):
         dim = len(self.transitions)
         tmpl_normal = [0]*dim
         # Each transition corresponds to one dimension
-        # transition.id -> dimension number
-        transitions = {}
+        # transition.label -> dimension number
+        transitions = self.event_dictionary
         # Each facet corresponds to one place
         # place.id -> {normal->[arc.value], offset->marking}
         facets_dict = {}
@@ -105,10 +105,16 @@ class PetriNet(object):
                 coef = arc.value
                 place = arc.source
                 transition = arc.destination
-            x = transitions.setdefault(transition.id,len(transitions))
+            x = transitions.setdefault(transition.label,len(transitions))
             facet = facets_dict.setdefault(place.id,{'normal':list(tmpl_normal),
+                                                    'in_transitions':[],
+                                                    'out_transitions':[],
                                                     'offset': -1*place.marking,
                                                     'id':place.id})
+            if coef < 0:
+                facet['in_transitions'].append(transition.label)
+            else:
+                facet['out_transitions'].append(transition.label)
             if facet['normal'][x]:
                 logger.debug('Coeficient already loaded. Dummy place')
                 coef = 0
