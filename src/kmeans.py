@@ -53,8 +53,8 @@ def two_means(points,max_size=None,min_size=None):
         mu, clusters = find_centers(points, 2)
         retries -= 1
     if len(clusters) == 0:
-        logger.debug('Cannot get clusters with k-means for points %s',points)
-        #raise CannotGetClusters()
+        logger.error('Cannot get clusters with k-means for points %s',points)
+        raise CannotGetClusters()
     clu0 = clusters.get(0,[])
     clu1 = clusters.get(1,[])
     if len(clu1) == 0 or (len(clu0) > 0 and max(clu0) > max(clu1)):
