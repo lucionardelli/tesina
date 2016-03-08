@@ -172,9 +172,9 @@ class Halfspace(Halfspace):
         # as simple as it gets
         simple = sum(abs(x) for x in self.normal) <= 1
         non_trivial = False
-        if not simple:
-            some_consume = False
-            some_produce = False
+
+        some_consume = False
+        some_produce = False
 
         diff_sol = z3_b != b
         h1 = b
@@ -191,7 +191,7 @@ class Halfspace(Halfspace):
             possible_x = z3.And(possible_x, var >= 0)
 
             solver.add(min(0,coeff) <= smt_coeff, smt_coeff <= max(0, coeff))
-            if not simple:
+            if not neg_points and not simple:
                 some_consume = z3.Or(some_consume, smt_coeff < 0)
                 some_produce = z3.Or(some_produce, smt_coeff > 0)
 
@@ -200,15 +200,14 @@ class Halfspace(Halfspace):
             h1 = h1 + coeff * var
             h2 = h2 + smt_coeff * var
 
-        if not simple:
+        if not neg_points and not simple:
             solver.add(z3.simplify(some_consume))
             solver.add(z3.simplify(some_produce))
         solver.add(z3.simplify(non_trivial))
         solver.add(z3.simplify(diff_sol))
         solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(possible_x, h1 <= 0), h2 <= 0))))
 
-        ## non negative point should be a solution
-#        for np in list(neg_points)[:min(100,len(neg_points))]:
+        ## non negative point shouldn't be a solution
         for np in list(neg_points):
             smt_np = False
             ineq_np = self.offset
@@ -220,12 +219,16 @@ class Halfspace(Halfspace):
             solver.add(smt_np)
 
         sol = solver.check()
-        if sol == z3.unsat or sol == z3.unknown:
+        if sol == z3.unsat:
             ret = False
-            del(solver)
-            del(sol)
+            logger.info('Z3 returns UNSAT: Cannot reduce without adding neg info')
+        elif sol == z3.unknown:
+            ret = False
+            logger.info('Z3 returns UNKNOWN: Cannot reduce in less than %s miliseconds', timeout)
         else:
             ret = solver.model()
+        del(solver)
+        del(sol)
         return ret
 
     def simplify(self, sol):

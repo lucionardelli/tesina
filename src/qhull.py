@@ -81,12 +81,14 @@ class Qhull(object):
 
     @stopwatch
     def prepare_negatives(self):
-        positive_points = len(self.points)
         actual_neg_points = []
+        removed = 0
+        logger.info('Prepare_negatives starts %s p',len(self.neg_points)
         for npoint in self.neg_points:
             if npoint not in self:
                 actual_neg_points.append(npoint)
-                positive_points -= 1
+                removed += 1
+        if removed: print 'prepare_negatives removed',removed
         self.neg_points = actual_neg_points
 
     def union(self, facets):
@@ -120,8 +122,8 @@ class Qhull(object):
         positions = []
         for point in points:
             if len(point) != self.dim:
-                raise ValueError("Convex Hulls and points must live in the same"\
-                        " dimension!")
+                raise ValueError("Convex Hulls (dim %s) and points (dim %s) must live in the same"\
+                        " dimension!"%(len(point), self.dim))
             if point in self:
                 inside.append(point)
             else:
@@ -212,24 +214,23 @@ class Qhull(object):
         popped = 0
         if len(self.neg_points):
             for idx,facet in enumerate(self.facets):
-                # If the max coef is inside the expected
-                # we don't try to remove it
-                if max_coef and len([x for x in facet.normal + [facet.offset]\
-                        if abs(x) > max_coef]) > 0:
-                    # Create a dummy hull to temporaly store the facets
-                    # of the original hull except for the candidate to be deleted
-                    tmpqhull = Qhull(set())
-                    tmpqhull.facets = list(set(facets)-set([facet]))
-                    simplify = True
-                    for nidx, npoint in enumerate(self.neg_points):
-                        logger.info('Trying npoint #%s'%nidx)
-                        if npoint in tmpqhull:
-                            simplify = False
-                            break
-                    if simplify:
-                        facets.pop(idx - popped)
-                        popped += 1
+                # Create a dummy hull to temporaly store the facets
+                # of the original hull except for the candidate to be deleted
+                tmpqhull = Qhull(set())
+                tmpqhull.facets = list(set(facets)-set([facet]))
+                simplify = True
+                for nidx, npoint in enumerate(self.neg_points):
+                    logger.info('Trying npoint #%s'%nidx)
+                    if npoint in tmpqhull:
+                        simplify = False
+                        logger.info('Failed due to '+str(nidx))
+                        break
+                if simplify:
+                    facets.pop(idx - popped)
+                    popped += 1
             logger.info('Popped %d facets using negative info',popped)
+        else:
+            logger.info( "NOSMT no negative points around hull!")
         self.facets = facets
 
     def complexity(self):
@@ -252,6 +253,7 @@ class Qhull(object):
         non_trivial = z3.Or(False)
         A1 = True
         A2 = True
+        variables = []
         for p_id, place in enumerate(self.facets):
             b = place.offset
             smt_b = z3.Int("b%s"%(p_id))
@@ -270,12 +272,10 @@ class Qhull(object):
             simple = sum(abs(x) for x in place.normal) <= 1
             diff_sig = reduce(lambda x,y:x*y, [x + 1 for x in place.normal]) < 1
 
-            if not simple and diff_sig:
-                some_produce = False
-                some_consume = False
             h1 = b
             h2 = smt_b
-            variables = []
+            some_consume = False
+            some_produce = False
             for t_id, val in enumerate(place.normal):
                 smt_val = z3.Int("a%s-%s"%(p_id,t_id))
                 x = z3.Int("x%s"%(t_id))
@@ -288,7 +288,7 @@ class Qhull(object):
                     else:
                         solver.add(val <= smt_val)
                         solver.add(smt_val <= 0)
-                    if not simple and diff_sig:
+                    if not self.neg_points and not simple and diff_sig:
                         some_consume = z3.Or(some_consume, smt_val < 0)
                         some_produce = z3.Or(some_produce, smt_val > 0)
                     non_trivial = z3.Or(non_trivial, smt_val != 0)
@@ -297,7 +297,7 @@ class Qhull(object):
                     h2 = h2 + smt_val * x
                 else:
                     solver.add(smt_val == 0)
-            if not simple and diff_sig:
+            if not self.neg_points and not simple and diff_sig:
                 solver.add(z3.simplify(some_consume))
                 solver.add(z3.simplify(some_produce))
             A1 = z3.And(A1, h1 <= 0)
@@ -306,8 +306,7 @@ class Qhull(object):
         solver.add(z3.simplify(diff_sol))
         solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, A1), A2))))
         # non negative point shouldn't be a solution
-        #for np in list(self.neg_points)[:min(100,len(self.neg_points))]:
-        for np in list(self.neg_points):
+        for np in self.neg_points:
             smt_np = False
             for p_id, place in enumerate(self.facets):
                 ineq_np = place.offset
@@ -318,8 +317,12 @@ class Qhull(object):
                 smt_np = z3.simplify(z3.Or(smt_np, ineq_np > 0))
             solver.add(smt_np)
         sol = solver.check()
-        if sol == z3.unsat or sol == z3.unknown:
+        if sol == z3.unsat:
             ret = False
+            logger.info('Z3 returns UNSAT: Cannot reduce without adding neg info')
+        elif sol == z3.unknown:
+            ret = False
+            logger.info('Z3 returns UNKNOWN: Cannot reduce in less than %s miliseconds', timeout)
         else:
             ret = solver.model()
         return ret

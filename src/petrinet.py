@@ -62,6 +62,9 @@ class PetriNet(object):
             place_init_mark_text.text = str(pl.marking)
 
         for arc in self.arcs:
+            if arc.source is None or arc.destination is None:
+                logger.error("Invalid ar found: [%s] %s",arc.id,arc)
+                continue
             arc_node = etree.SubElement(page, 'arc', id=arc.id,
                     source=arc.source.id, target=arc.destination.id)
             if arc.value > 1:
