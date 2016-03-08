@@ -2,6 +2,7 @@
 # -*- coding: UTF-8
 from qhull import Qhull
 from parser import XesParser, AdHocParser
+from pnml import PnmlParser
 from negative_parser import NegativeParser
 from corrmatrix import CorrMatrix
 from halfspace import Halfspace
@@ -18,6 +19,7 @@ from sampling import sampling
 from projection import projection
 from stopwatch_wrapper import stopwatch
 
+
 from config import logger
 
 class PacH(object):
@@ -27,7 +29,7 @@ class PacH(object):
             nfilename=None, max_coef=10,
             smt_matrix=False,
             smt_iter=False,
-            smt_timeout=0,
+            smt_timeout=300,
             sanity_check=False):
         # El archivo de trazas
         logger.info('Positive traces file: %s', filename)
@@ -92,6 +94,7 @@ class PacH(object):
                 'dimension': 0,
                 'traces': 0,
                 'events': 0,
+                'initial_complexity': 0,
                 'complexity': 0,
                 'effectiveness': 0,
                 'benchmark': '',
@@ -140,17 +143,23 @@ class PacH(object):
             parser = XesParser(self.filename)
         elif self.filename.endswith('.txt'):
             parser = AdHocParser(self.filename)
+        elif self.filename.endswith('.pnml'):
+            parser = PnmlParser(self.filename)
         else:
-            logger.error("Error in file %s extension. Only '.xes' and '.txt'"\
+            logger.error("Error in file %s extension. Only '.xes', '.pnml' and '.txt'"\
                     " are allowed!",(self.filename or ''))
-            raise Exception("Error in file %s extension. Only '.xes' and '.txt'"\
+            raise Exception("Error in file %s extension. Only '.xes', '.pnml' and '.txt'"\
                     " are allowed!"%(self.filename or ''))
-        parser.parikhs_vector()
+        parser.parse()
         self.event_dictionary = parser.event_dictionary
         self.reversed_dictionary = rotate_dict(parser.event_dictionary)
-        self.pv_traces = parser.pv_traces
-        self.pv_set = parser.pv_set
-        self.pv_array = parser.pv_array
+        if self.filename.endswith('.pnml'):
+            self.parsed_petrinet = parser.petrinet
+        else:
+            parser.parikhs_vector()
+            self.pv_traces = parser.pv_traces
+            self.pv_set = parser.pv_set
+            self.pv_array = parser.pv_array
         self.dim = parser.dim
         if self.verbose:
             print 'Parse done\n'
@@ -210,6 +219,7 @@ class PacH(object):
     @qhull.setter
     def qhull(self, qhull):
         self._qhull = qhull
+        self.initial_complexity = self._qhull.complexity()
         return self._qhull
 
     @property
@@ -220,9 +230,12 @@ class PacH(object):
     @sampling
     @projection
     def get_qhull(self, points):
-        points = set(map(tuple, points))
-        qhull = Qhull(points, neg_points=list(self.npv_set))
-        qhull.compute_hiperspaces()
+        if self.filename.endswith('.pnml'):
+            qhull = self.parsed_petrinet.get_qhull(neg_points=self.npv_set)
+        else:
+            points = set(map(tuple, points))
+            qhull = Qhull(points, neg_points=self.npv_set)
+            qhull.compute_hiperspaces()
         self.output['times'].update(qhull.output.get('times',{}))
         return qhull
 
@@ -442,6 +455,7 @@ Statistic of {positive}: with negative traces from {negative}
     traces          ->  {traces}
     events          ->  {events}
     negative        ->  {negative}
+    initial_complexity      ->  {initial_complexity}
     complexity      ->  {complexity}
     effectiveness   ->  {effectiveness}
     exec_time       ->  {time}
@@ -454,7 +468,7 @@ Statistic of {positive}: with negative traces from {negative}
         if self.samp_num > 1:
             output +="""\n        do_sampling     ->  {do_sampling}"""
             overall += times.get('do_sampling')
-        if self.proj_size is not None:
+        if self.proj_size is not None and times.get('do_projection'):
             output +="""\n        do_projection   ->  {do_projection}"""
             overall += times.get('do_projection')
         output +="""\n        convexHull      ->  {compute_hiperspaces}"""
@@ -481,6 +495,7 @@ Statistic of {positive}: with negative traces from {negative}
         self.output['dimension'] = self.dim
         self.output['traces'] = len(self.pv_traces)
         self.output['events'] = sum(sum(trace[-1]) for idc,trace in self.pv_traces.items())
+        self.output['initial_complexity'] = self.initial_complexity or '-'
         self.output['complexity'] = self.complexity
         if self.initial_complexity:
             self.output['effectiveness'] = 1 - (float(self.complexity) / self.initial_complexity)

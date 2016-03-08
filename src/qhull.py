@@ -83,12 +83,13 @@ class Qhull(object):
     def prepare_negatives(self):
         actual_neg_points = []
         removed = 0
-        logger.info('Prepare_negatives starts %s p',len(self.neg_points)
+        logger.info('Prepare_negatives starts %s points',len(self.neg_points))
         for npoint in self.neg_points:
             if npoint not in self:
                 actual_neg_points.append(npoint)
                 removed += 1
-        if removed: print 'prepare_negatives removed',removed
+        if removed:
+            logger.info('prepare_negatives removed %s points',removed)
         self.neg_points = actual_neg_points
 
     def union(self, facets):
