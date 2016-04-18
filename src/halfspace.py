@@ -6,7 +6,7 @@ that the other modules lacks of
 """
 
 __author__ = "Lucio Nardelli"
-__version__ = "0.1"
+__version__ = "1.0"
 __maintainer__ = "Lucio Nardelli"
 __email__ = "lucio (at) fceia.unr.edu.ar"
 __date__ = "August 27, 2015"
@@ -38,11 +38,13 @@ class Halfspace(Halfspace):
         self.__original_normal = normal
         self.__original_offset = offset
         if integer_vals:
-            logger.debug('Searching for integer coeficients of HS %s', self)
             self.integerify()
-            logger.debug('Done %s', self)
 
     def __hash__(self):
+        """
+           Two halfspaces are considered equal if they
+           share the normal and the offset.
+        """
         return hash(str(self.normal + [self.offset]))
 
     def __eq__(self, other):
@@ -63,33 +65,25 @@ class Halfspace(Halfspace):
         header = "HS dim {0}".format(self.dim)
         hs_repr = ''
         for idx,coef in enumerate(self.normal):
-            # Queremos dar vuelta el <= a 0 al imprimir
+            # We print it as Ax <= t
             if coef > 0:
-                hs_repr += " - {0: >3} x{1: <2}".format(coef,idx)
+                hs_repr += " -{0: >3} x{1: <2}".format(coef,idx)
             elif coef < 0:
-                hs_repr += " + {0: >3} x{1: <2}".format(abs(coef),idx)
+                hs_repr += " +{0: >3} x{1: <2}".format(abs(coef),idx)
             else:
-                # Los coeficientes 0 no los imprimimos
+                # If coefficient is zero, skip it
                 pass
         if hs_repr.startswith(' + '):
-            # El primer símbolo no va
+            # If first coefficient is positive, ignore "sign"
             hs_repr = hs_repr[3:]
 
         if self.offset > 0:
-            ti_repr = ' - {0: >3}'.format(abs(self.offset))
+            ti_repr = ' -{0: >3}'.format(abs(self.offset))
         elif self.offset < 0:
-            ti_repr = ' + {0: >3}'.format(abs(self.offset))
+            ti_repr = ' +{0: >3}'.format(abs(self.offset))
         else:
             ti_repr = ''
-        return "{0: <10}{1} {2} >= 0".format(header, hs_repr, ti_repr)
-
-    def __fstr__(self):
-        header = "HS in dim {0}".format(self.dim)
-        hs_repr = []
-        for idx in xrange(self.dim):
-            hs_repr.append("{0:.2f} x{1}".format(self.normal[idx], idx))
-        hs_repr = ' + '.join(hs_repr)
-        return "{0}\t{1} + {2:.2f} <= 0".format(header, hs_repr, self.offset)
+        return "{0: <10}{1}{2} >= 0".format(header, hs_repr, ti_repr)
 
     def inside(self, point, use_original=False):
         """
@@ -98,7 +92,7 @@ class Halfspace(Halfspace):
         is supposed to be
 
         Args:
-            origin: point to check if is in the hyperplane
+            origin: point to check if is in the hyperspace
         """
         if use_original:
             normal = self.__original_normal
@@ -123,7 +117,7 @@ class Halfspace(Halfspace):
         normal = []
         for axis in xrange(dim):
             if axis in ext_dict:
-                # El eje pertenece a una dimensión "de los viejas"
+                # Axis correspond to a new dimension (i.e. and old one)
                 idx = ext_dict.index(axis)
                 normal.append(self.normal[idx])
                 original_normal.append(self.__original_normal[idx])
@@ -133,17 +127,10 @@ class Halfspace(Halfspace):
         self.normal = normal
         self.__original_normal = original_normal
 
-    def axis_intersection(self, axis):
-        # Buscamos la intersección del hiperespacio con el eje 'axis'
-        ret = 0
-        if self.normal[axis]:
-            ret = (-1 * self.offset) / self.normal[axis]
-        return ret
-
     def integerify(self):
-        # Si alguno de los valores no es un entero,
-        # buscamos una representación equivalente
-        # del hiperespacio a valores enteros
+        # If one of the values (i.e. coefficients or it)
+        # is not an integer we look for a upper-representation
+        # for the halfspace but with integer values
         if any(map(lambda x: not x.is_integer(), self.normal)):
             integerified = integer_coeff(self.normal+[self.offset])
             self.offset = integerified[-1]

@@ -3,7 +3,7 @@
 import logging
 
 # Float numbers will consider this many decimal part
-TRUNCATE=4
+TRUNCATE=3
 # Upper limit for LCM
 LCM_LIMIT=5000
 # Tolerance for equality comparision

@@ -5,25 +5,23 @@ from utils import get_positions
 from halfspace import Halfspace
 from parser import XesParser
 from custom_exceptions import IncorrectOutput, CannotGetHull, LostPoints
-from stopwatch_wrapper import stopwatch
-
-import sys
+from stopwatch import StopWatchObj
 from redirect_output import stderr_redirected
-try:
-    import z3
-except:
-    pass
-
 from config import logger
 
-class Qhull(object):
+import sys
+import z3
 
-    def __init__(self, points=[], neg_points=[], verbose=False):
+class Qhull(StopWatchObj):
+
+    def __init__(self, points=[], neg_points=[]):
+        super(Qhull, self).__init__()
         self.points = set(points)
         self.neg_points = set(neg_points)
         self.facets = []
-        self.verbose = verbose
-        self.output = {}
+
+    def __str__(self):
+        return '\n'.join(['%s'%f for f in self.facets])
 
     def __contains__(self, point):
         return self.is_inside(point)
@@ -47,15 +45,16 @@ class Qhull(object):
             raise IncorrectOutput()
         return (dim, facets_nbr, facets)
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def compute_hiperspaces(self):
-        # La característica heurística al buscar conexiones entre
-        # diferentes clusters hace que pueda fallar
-        # por lo que redirigimos la salida para ser silenciosos
-        # en esos casos
         if not len(self.points) > 0:
             logger.error('No points to compute hull!')
             raise Exception('No points to compute hull!')
+
+        # The heuristic caracteristic when searching to connect
+        # different clusters does that it might fail
+        # so we redirect the stdout to avoid such error
+        # being visible to user
         stderr_fd = sys.stderr.fileno()
         with open('/tmp/qhull-output.log', 'w') as f, stderr_redirected(f):
             points = list(self.points)
@@ -73,14 +72,14 @@ class Qhull(object):
                 dim,len(facets))
         self.dim = dim
         self.facets = facets
-        if self.verbose:
-            print "Computed MCH with ",facets_nbr," halfspaces"
-            print 'This are them:\n'
-            for facet in self.facets:print facet
         return self.dim
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def prepare_negatives(self):
+        """
+            Ensure that negative points given
+            live all outside the hull
+        """
         actual_neg_points = []
         removed = 0
         logger.info('Prepare_negatives starts %s points',len(self.neg_points))
@@ -94,16 +93,17 @@ class Qhull(object):
 
     def union(self, facets):
         """
-         Merge hull to a list of facets
+            Merge hull with a list of facets
         """
         fdim = None
         for facet in facets:
             if fdim is None:
                 fdim = facet.dim
             else:
-                assert fdim == facet.dim, "Not all facets to be merge hava the"\
+                assert fdim == facet.dim, "Not all facets to be merge have the"\
                         " same dimension!"
-        # If fdim is None the facets to merge is empty. We can always do that
+        # If fdim is None the facets to merge is empty
+        # We can always merge with an empty facetdo that
         if fdim is not None and self.dim != fdim:
             raise ValueError("Convex Hulls and facets must live in the same"\
                     " dimension!")
@@ -115,6 +115,7 @@ class Qhull(object):
             (they must all live in the same dimension of the hull)
             it returns a dictionary indicating which one are
             inside and which one are outside
+            Used for sanity checks
         """
         ret = {}
         inside = ret.setdefault('inside',[])
@@ -142,7 +143,7 @@ class Qhull(object):
         parser.parikhs_vector()
         return self.all_in(parser.pv_set)
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def all_in(self, points):
         # Sanity check. Are points inside the Hull?
         # It makes thing slower, speacially in big cases
@@ -185,12 +186,12 @@ class Qhull(object):
     def extend(self, eigen, cluster, orig_dim=None):
         """
          Given a qhull computed from a cluster (i.e. projection)
-         "extended" it (making all the other variables zero)
+         "extend" it (making all the new variables zero)
          to the original dimension
         """
-        # Nuevamente los odeno y busco la posición
-        # en el eigenvector original. Luego "agrando"
-        # el qhull en concordancia
+        # Order and search for the actual position
+        # on the original eigenvector. Afterwards, "extend"
+        # the hull to conform with the original positions
         cluster = list(set([abs(x) for x in cluster]))
         cluster.sort(reverse=True)
         orig_dim = orig_dim or self.dim
@@ -201,15 +202,19 @@ class Qhull(object):
                     and idx%orig_dim not in proj_idx]
         self.extend_dimension(orig_dim, proj_idx)
 
-    def can_eliminate(self,candidate, npoint):
+    def can_eliminate(self, candidate, npoint):
+        """
+          Checks whether we can safely (i.e. whitout adding the
+          negativo point to the hull) remove one facet
+        """
         ret = False
-        for facet in set(self.facets)-set(candidate):
+        for facet in (set(self.facets) - set(candidate)):
             if not facet.inside(npoint):
                 ret = True
                 break
         return ret
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def no_smt_simplify(self, max_coef=10):
         facets = list(self.facets)
         popped = 0
@@ -244,7 +249,7 @@ class Qhull(object):
         return complexity
 
     # Support for Z3 SMT-Solver
-    @stopwatch
+    @StopWatchObj.stopwatch
     def smt_solution(self,timeout):
         solver = z3.Solver()
         solver.set("timeout", timeout)
@@ -328,7 +333,7 @@ class Qhull(object):
             ret = solver.model()
         return ret
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def smt_simplify(self, sol):
         facets = []
         if sol:
@@ -344,14 +349,14 @@ class Qhull(object):
                         facets.append(f)
             self.facets = facets
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def smt_hull_simplify(self,timeout=0):
         sol = self.smt_solution(timeout)
         while sol:
             self.smt_simplify(sol)
             sol = self.smt_solution(timeout)
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def smt_facet_simplify(self,timeout=0):
         for facet in self.facets:
             facet.smt_facet_simplify(neg_points=self.neg_points,timeout=timeout)

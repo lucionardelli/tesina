@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
 from qhull import Qhull
-from parser import XesParser, AdHocParser
+from parser import XesParser
+from text_parser import AdHocParser
 from pnml import PnmlParser
 from negative_parser import NegativeParser
 from corrmatrix import CorrMatrix
@@ -17,13 +18,13 @@ import os
 from custom_exceptions import CannotGetHull, WrongDimension, CannotIntegerify
 from sampling import sampling
 from projection import projection
-from stopwatch_wrapper import stopwatch
+from stopwatch import StopWatchObj
 
 
 from config import logger
 
-class PacH(object):
-    def __init__(self, filename, verbose=False,
+class PacH(StopWatchObj):
+    def __init__(self, filename,
             samp_num=1, samp_size=None,
             proj_size=None, proj_connected=True,
             nfilename=None, max_coef=10,
@@ -31,13 +32,13 @@ class PacH(object):
             smt_iter=False,
             smt_timeout=300,
             sanity_check=False):
+        super(PacH,self).__init__()
         # El archivo de trazas
         logger.info('Positive traces file: %s', filename)
         self.filename = filename
         # El archivo de trazas negativas (if any)
         self.nfilename = nfilename
         logger.info('Negative traces file: %s', nfilename)
-        self.verbose = verbose
         # Referentes a las trazas
         self.pv_traces = {}
         self.pv_set = set()
@@ -88,7 +89,7 @@ class PacH(object):
         else:
             pp_nfile = ''
         self.initial_complexity = False
-        self.output = { 'positive': pp_file,
+        self.output = {'positive': pp_file,
                 'negative': pp_nfile,
                 'time': '%s'%datetime.now(),
                 'dimension': 0,
@@ -103,16 +104,13 @@ class PacH(object):
                 'overall_time': 0,
                 'times': {}}
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def parse_negatives(self):
         if not self.nfilename:
             logger.error('No se ha especificado un archivo '\
                     'de trazas negativas!')
             raise Exception('No se ha especificado un archivo '\
                     'de trazas negativas!')
-        if self.verbose:
-            print 'Starting parse of negative traces\n'
-            start_time = time.time()
         if self.nfilename.endswith('.xes'):
             parser = NegativeParser(self.nfilename,
                     required_dimension=self.dim,
@@ -128,17 +126,9 @@ class PacH(object):
         self.npv_traces = parser.pv_traces
         self.npv_set = parser.pv_set
         self.npv_array = parser.pv_array
-        if self.verbose:
-            print 'Parse of negative traces done\n'
-            elapsed_time = time.time() - start_time
-            print '# RESULTADO  obtenido en: ', elapsed_time
-            print '#'*40+'\n'
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def parse_traces(self):
-        if self.verbose:
-            print 'Starting parse\n'
-            start_time = time.time()
         if self.filename.endswith('.xes'):
             parser = XesParser(self.filename)
         elif self.filename.endswith('.txt'):
@@ -161,11 +151,6 @@ class PacH(object):
             self.pv_set = parser.pv_set
             self.pv_array = parser.pv_array
         self.dim = parser.dim
-        if self.verbose:
-            print 'Parse done\n'
-            elapsed_time = time.time() - start_time
-            print '# RESULTADO  obtenido en: ', elapsed_time
-            print '#'*40+'\n'
 
     def parse(self):
         self.parse_traces()
@@ -226,7 +211,7 @@ class PacH(object):
     def facets(self):
         return self.qhull.facets
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     @sampling
     @projection
     def get_qhull(self, points):
@@ -239,13 +224,10 @@ class PacH(object):
         self.output['times'].update(qhull.output.get('times',{}))
         return qhull
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def no_smt_simplify(self):
         if self.nfilename and not self.smt_matrix and not self.smt_iter:
             logger.debug('Starting to simplify model from negative points')
-            if self.verbose:
-                print 'Starting to simplify model from negative points\n'
-                start_time = time.time()
             old_len = len(self.facets)
             self.qhull.no_smt_simplify(max_coef=self.max_coef)
             removed = old_len - len(self.facets)
@@ -253,32 +235,11 @@ class PacH(object):
                 logger.debug('We removed %d facets without allowing negative points',removed)
             else:
                 logger.debug("Couldn't simplify model without adding negative points")
-            if self.verbose:
-                elapsed_time = time.time() - start_time
-                print 'Ended simplify from negative points\n'
-                print '# RESULTADO  obtenido en: ', elapsed_time
-                if removed:
-                    print 'We removed %d facets without allowing negative points' % removed
-                else:
-                    print "Couldn't simplify model without adding negative points"
-                print '#'*40+'\n'
 
     def model(self, points=None):
-        if self.verbose:
-            print 'Starting modeling\n'
-            start_time = time.time()
         # The actual work is done when accesing self.facets
         facets = self.facets
-        if self.verbose:
-            print "Ended with MCH with ",len(facets)," halfspaces"
-            print 'This are them:\n'
-            for facet in facets:print facet
         logger.info("Ended with MCH with %s halfspaces",len(facets))
-        if self.verbose:
-            elapsed_time = time.time() - start_time
-            print 'Modeling done\n'
-            print '# RESULTADO  obtenido en: ', elapsed_time
-            print '#'*40+'\n'
 
     def smt_simplify(self):
         if self.smt_matrix:
@@ -302,8 +263,6 @@ class PacH(object):
         # Apply smt_simplify.
         # Options are on the hull level, on every facet or none
         self.smt_simplify()
-        complexity = self.complexity
-        self.output['complexity'] = complexity
         self.generate_output_file()
         return complexity
 
@@ -323,14 +282,13 @@ class PacH(object):
         def_name = '%s.%s'%(def_name+opts,extension)
         return def_name
 
-    @stopwatch
+    @StopWatchObj.stopwatch
     def generate_pnml(self, filename=None):
-        if not filename:
-            filename = self.get_def_pnml_name()
+        filename = filename or self.get_def_pnml_name()
         net_name = os.path.basename(filename)
         net_id = net_name.replace(' ','_').lower()
 
-        net = PetriNet(net_id=net_id,name=net_name,filename=filename)
+        net = PetriNet(net_id=net_id,name=net_name)
         # Comenzamos con los Places (i.e. un place por cada inecuación)
         nbr_places = 0
         places_list = []
@@ -438,7 +396,7 @@ class PacH(object):
                 # especie de "/dev/null" donde tirar los markings generados
                 arc_id = 'arc-T%s-P%04d'%(tr_id,pl_id)
                 Arc(net, arc_id, transition_id,place_id, 1)
-        net.save()
+        net.save(filename=filename)
         logger.info('Generated the PNML %s', filename)
         return True
 

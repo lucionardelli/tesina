@@ -6,7 +6,8 @@ import sys
 from os.path import isfile
 from pach import PacH
 from qhull import Qhull
-from parser import XesParser, AdHocParser
+from parser import XesParser
+from text_parser import AdHocParser
 from comparator_xes import ComparatorXes
 from comparator_pnml import ComparatorPnml
 from negative_parser import NegativeParser
@@ -137,9 +138,9 @@ def parser_main():
             if not isfile(filename):
                 raise Exception("No such file")
             if filename.endswith('.xes'):
-                obj = XesParser(filename, verbose='--verbose' in sys.argv)
+                obj = XesParser(filename)
             elif filename.endswith('.txt'):
-                obj = AdHocParser(filename, verbose='--verbose' in sys.argv)
+                obj = AdHocParser(filename)
             obj.parse()
             if '--verbose' in sys.argv:
                 print 'Parse done. Calcuting Parikhs vector'
@@ -185,7 +186,7 @@ def qhull_main():
             else:
                 if '--debug' in sys.argv:
                     pdb.set_trace()
-                qhull = Qhull(points, verbose='--verbose' in sys.argv)
+                qhull = Qhull(points)
                 point_qty = qhull.compute()
                 print "Computed MCH with ", point_qty," points"
                 if '--verbose' in sys.argv:
@@ -218,7 +219,7 @@ def negative_parser_main():
                 raise Exception("No such file")
             if '--debug' in sys.argv:
                 pdb.set_trace()
-            obj = NegativeParser(filename, verbose='--verbose' in sys.argv)
+            obj = NegativeParser(filename)
             obj.parse()
             if '--verbose' in sys.argv:
                 print 'Parse done. Calcuting Parikhs vector'
@@ -424,7 +425,7 @@ def pnml_main():
                 raise Exception("No such file")
             if '--debug' in sys.argv:
                 pdb.set_trace()
-            obj = PnmlParser(filename, verbose='--verbose' in sys.argv)
+            obj = PnmlParser(filename)
             obj.parse()
             if '--verbose' in sys.argv:
                 print 'Parse done.'
