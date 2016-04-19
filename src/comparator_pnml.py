@@ -23,13 +23,15 @@ class ComparatorPnml(object):
         self.positive_log = positive_log
 
         # Helper pach. Doesn't actually compute hull
-        self.pach = PacH(filename,nfilename=nfilename)
+        self.pach = PacH(filename, nfilename=nfilename)
         self.pach.event_dictionary = parser.event_dictionary
         self.pach.dim = self.dim
         self.pach.reversed_dictionary = rotate_dict(parser.event_dictionary)
         if nfilename:
             self.pach.parse_negatives()
 
+        #qhull = self.net.get_qhull()
+# TODO WTF!?
         qhull = self.net.get_qhull(neg_points=self.pach.npv_set)
         qhull.prepare_negatives()
         # Hull for NO SMT

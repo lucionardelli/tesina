@@ -86,6 +86,7 @@ class Qhull(StopWatchObj):
         for npoint in self.neg_points:
             if npoint not in self:
                 actual_neg_points.append(npoint)
+            else:
                 removed += 1
         if removed:
             logger.info('prepare_negatives removed %s points',removed)

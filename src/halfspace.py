@@ -141,6 +141,7 @@ class Halfspace(Halfspace):
 
     # Support for Z3 SMT-Solver
     def smt_solution(self, timeout, neg_points=None):
+        if sum(abs(x) for x in self.normal) == 0: return False
         neg_points = neg_points or []
         solver = z3.Solver()
         solver.set("timeout", timeout)
@@ -159,9 +160,9 @@ class Halfspace(Halfspace):
         # as simple as it gets
         simple = sum(abs(x) for x in self.normal) <= 1
         non_trivial = False
-
-        some_consume = False
-        some_produce = False
+        if not simple:
+            some_consume = False
+            some_produce = False
 
         diff_sol = z3_b != b
         h1 = b
@@ -170,6 +171,7 @@ class Halfspace(Halfspace):
 
         for t_id, coeff in enumerate(self.normal):
             if not coeff:
+                solver.add(z3.Int("a%s"%t_id) == 0)
                 continue
             smt_coeff = z3.Int("a%s"%t_id)
             var = z3.Int("x%s"%t_id)
@@ -190,8 +192,10 @@ class Halfspace(Halfspace):
         if not neg_points and not simple:
             solver.add(z3.simplify(some_consume))
             solver.add(z3.simplify(some_produce))
-        solver.add(z3.simplify(non_trivial))
-        solver.add(z3.simplify(diff_sol))
+        if not len(list(neg_points)):
+	        solver.add(z3.simplify(non_trivial))
+	if str(z3.simplify(diff_sol)) != False:
+		solver.add(z3.simplify(diff_sol))
         solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(possible_x, h1 <= 0), h2 <= 0))))
 
         ## non negative point shouldn't be a solution
@@ -199,11 +203,12 @@ class Halfspace(Halfspace):
             smt_np = False
             ineq_np = self.offset
             for t_id, coeff in enumerate(self.normal):
-                if np[t_id]:
+                if coeff and np[t_id]:
                     z3_var = z3.Int("a%s"%(t_id))
                     ineq_np = ineq_np + z3_var * np[t_id]
             smt_np = z3.simplify(z3.Or(smt_np, ineq_np > 0))
-            solver.add(smt_np)
+            if str(smt_np) != 'False': 
+		solver.add(smt_np)
 
         sol = solver.check()
         if sol == z3.unsat:
@@ -226,9 +231,9 @@ class Halfspace(Halfspace):
             for t_id, coeff in enumerate(self.normal):
                 smt_coeff = z3.Int("a%s"%(t_id))
                 normal.append(int(str(sol[smt_coeff] or 0)))
-            if sum(abs(x) for x in normal) != 0:
-                self.normal = normal
-                self.offset = offset
+
+            self.normal = normal
+            self.offset = offset
 
     def smt_facet_simplify(self, neg_points=None, timeout=0):
         global counter

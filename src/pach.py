@@ -422,30 +422,30 @@ Statistic of {positive}: with negative traces from {negative}
         parse_traces    ->  {parse_traces}"""
         if self.nfilename:
             output +="""\n        parse_negatives ->  {parse_negatives}"""
-            overall += times.get('parse_negatives')
+            overall += times.get('parse_negatives',0)
         if self.samp_num > 1:
             output +="""\n        do_sampling     ->  {do_sampling}"""
-            overall += times.get('do_sampling')
+            overall += times.get('do_sampling',0)
         if self.proj_size is not None and times.get('do_projection'):
             output +="""\n        do_projection   ->  {do_projection}"""
-            overall += times.get('do_projection')
+            overall += times.get('do_projection',0)
         output +="""\n        convexHull      ->  {compute_hiperspaces}"""
 
         if self.smt_matrix:
             benchmark = 'Matrix SMT Simplification'
             outfile = 'MatrixSMT_' + outfile
             output +="""\n        shift&rotate    ->  {smt_hull_simplify}"""
-            overall += times.get('smt_hull_simplify')
+            overall += times.get('smt_hull_simplify',0)
         elif self.smt_iter:
             benchmark = 'Iterative SMT Simplification'
             outfile = 'IterativeSMT_' + outfile
             output +="""\n        shift&rotate    ->  {smt_facet_simplify}"""
-            overall += times.get('smt_facet_simplify')
+            overall += times.get('smt_facet_simplify',0)
         else:
             benchmark = 'No SMT Simplification'
             outfile = 'NoSMT_' + outfile
             output +="""\n        simplify        ->  {no_smt_simplify}"""
-            overall += times.get('no_smt_simplify')
+            overall += times.get('no_smt_simplify',0)
 
         for k in ('parse_traces', 'compute_hiperspaces'):
             overall += times.get(k,0)

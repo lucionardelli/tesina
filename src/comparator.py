@@ -4,6 +4,7 @@ import copy
 from os.path import isfile
 
 from pach import PacH
+from parser import XesParser
 from config import logger
 class Comparator(object):
 
@@ -135,10 +136,14 @@ class Comparator(object):
         if not isfile(log_file):
             raise Exception("No such file")
         # For every benchmark, check that the hull accepts the positive log
+        parser = XesParser(log_file)
+        parser.event_dictionary = event_dictionary or {}
+        parser.parse()
+        parser.parikhs_vector()
         for benchmark in ['no_smt', 'smt_iter', 'smt_matrix']:
             qhull = getattr(self,'qhull_'+benchmark)
             try:
-                qhull.all_in_file(log_file, event_dictionary=event_dictionary)
+                qhull.all_in(parser.pv_set)
             except Exception, err:
                 logger.error("Error running check_hull for %s, file %s",benchmark, log_file)
                 raise
