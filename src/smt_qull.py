@@ -2,7 +2,7 @@
 # -*- coding: UTF-8
 from halfspace import Halfspace
 from custom_exceptions import IncorrectOutput, CannotGetHull
-from qhull import Qhull
+from convexhull import ConvexHull
 from config import logger
 
 from itertools import izip
@@ -16,7 +16,7 @@ from z3 import (Solver,
     unknown
 )
 
-class SMTQhull(Qull):
+class SMTHull(ConvexHull):
 
     def __parse_smt_solution(self, model):
         """
@@ -45,8 +45,8 @@ class SMTQhull(Qull):
 
     def __smt_solution(self, equation_number):
         if len(self.points) < 1:
-            logger.info('Cannot find solution for SMT-QULL with no points!')
-            raise Exception('Cannot find solution for SMT-QULL with no points!')
+            logger.info('Cannot find solution for SMT-HULL with no points!')
+            raise Exception('Cannot find solution for SMT-HULL with no points!')
         timeout = 3000 # TODO As argument?
         dim = len(list(points)[0])
         logger.info('Searching for hull in dimension %s based on %s points using SMT',
@@ -152,7 +152,7 @@ if __name__ == '__main__':
     try:
         smt_qhull_main()
     except Exception, err:
-        logger.error('SMT-Qhull Error: %s' % err, exc_info=True)
+        logger.error('SMT-Hull Error: %s' % err, exc_info=True)
         type, value, tb = sys.exc_info()
         traceback.print_exc()
         #pdb.post_mortem(tb)
