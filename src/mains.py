@@ -116,6 +116,7 @@ def pach_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            logger.error('Error: %s' % err, exc_info=True)
             raise err
         return ret
 
@@ -155,6 +156,7 @@ def parser_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            logger.error('Error: %s' % err, exc_info=True)
             raise err
         return ret
 
@@ -198,6 +200,7 @@ def qhull_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            logger.error('Error: %s' % err, exc_info=True)
             raise err
     return ret
 
@@ -234,6 +237,7 @@ def negative_parser_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            logger.error('Error: %s' % err, exc_info=True)
             raise err
         return ret
 
@@ -326,6 +330,7 @@ def xes_comparator_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            logger.error('Error: %s' % err, exc_info=True)
             raise err
         return ret
 
@@ -404,6 +409,7 @@ def pnml_comparator_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            logger.error('Error: %s' % err, exc_info=True)
             raise err
         return ret
 
@@ -451,5 +457,6 @@ def pnml_main():
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            logger.error('Error: %s' % err, exc_info=True)
             raise err
         return ret

@@ -73,7 +73,8 @@ if __name__ == '__main__':
     from mains import negative_parser_main
     try:
         negative_parser_main()
-    except:
+    except Exception, err:
+        logger.error('Error: %s' % err, exc_info=True)
         type, value, tb = sys.exc_info()
         traceback.print_exc()
         pdb.post_mortem(tb)

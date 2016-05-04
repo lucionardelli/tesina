@@ -21,6 +21,7 @@ def sampling(func):
                     qhull.restrict_to(outsider)
                 facets = qhull.facets
             except Exception, err:
+                logger.error('Error: %s' % err, exc_info=True)
                 if self.samp_size:
                     logger.error('Cannot get MCH. Maybe doing *TOO*'\
                             ' small sampling?')

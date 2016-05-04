@@ -16,7 +16,7 @@ LOG_CONFIG = {
     'filename': '/var/log/pach/pach.log',
     'filemode': 'a',
     'format': '%(asctime)s %(levelname)-8s %(message)s',
-    'datefmt': '%a, %d %b %Y %H:%M:%S',
+    'datefmt': '%d-%b-%y %H:%M:%S',
 }
 
 logging.basicConfig(**LOG_CONFIG)

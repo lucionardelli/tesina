@@ -20,13 +20,19 @@ from rationals import integer_coeff
 from custom_exceptions import WrongDimension
 from config import *
 
-try:
-    import z3
-except:
-    #No module named z3, whouldn't be available
-    pass
+from z3 import (Solver,
+    Optimize,
+    Int,
+    Or,
+    And,
+    Implies,
+    ForAll,
+    simplify,
+    unsat,
+    unknown
+)
 
-counter = 0
+COUNTER = 0
 
 class Halfspace(Halfspace):
     """
@@ -85,6 +91,10 @@ class Halfspace(Halfspace):
             ti_repr = ''
         return "{0: <10}{1}{2} >= 0".format(header, hs_repr, ti_repr)
 
+    def complexity(self):
+        abs_normal = map(abs,self.normal)
+        return sum(abs_normal, abs(self.offset))
+
     def inside(self, point, use_original=False):
         """
         Determines if given points is inside the halfspace
@@ -103,7 +113,7 @@ class Halfspace(Halfspace):
         try:
             eq_res = np.dot(normal,point) + offset
         except Exception, err:
-            raise WrongDimension()
+            raise WrongDimension(exc_info=True)
         return eq_res < 0.0 or almost_equal(eq_res, 0.0, tolerance=TOLERANCE)
 
     def extend_dimension(self, dim, ext_dict):
@@ -131,7 +141,7 @@ class Halfspace(Halfspace):
         # If one of the values (i.e. coefficients or it)
         # is not an integer we look for a upper-representation
         # for the halfspace but with integer values
-        if any(map(lambda x: not x.is_integer(), self.normal)):
+        if any(x for x in self.normal if not float(x).is_integer()):
             integerified = integer_coeff(self.normal+[self.offset])
             self.offset = integerified[-1]
             self.normal = integerified[:-1]
@@ -140,106 +150,131 @@ class Halfspace(Halfspace):
             self.normal = map(int,self.normal)
 
     # Support for Z3 SMT-Solver
-    def smt_solution(self, timeout, neg_points=None):
-        if sum(abs(x) for x in self.normal) == 0: return False
-        neg_points = neg_points or []
-        solver = z3.Solver()
-        solver.set("timeout", timeout)
-        solver.set("zero_accuracy",10)
-
-        b = self.offset
-        z3_b = z3.Int("b")
-
-        if b:
-            solver.add(min(0,b) <= z3_b, z3_b <= max(0,b))
-        else:
-            solver.add(z3_b == 0)
-
-        possible_x = True
-        # If halfspace has coefficients adding 1 it's
+    def smt_solution(self, timeout, neg_points=None, optimize=False):
+        # If halfspace's coefficients add to 1 it's
         # as simple as it gets
-        simple = sum(abs(x) for x in self.normal) <= 1
-        non_trivial = False
-        if not simple:
-            some_consume = False
-            some_produce = False
+        normal_sum = sum(abs(x) for x in self.normal)
+        if normal_sum == 0:
+            return False
+        elif normal_sum <= 1:
+            simple = True
+        else:
+            simple = False
 
-        diff_sol = z3_b != b
-        h1 = b
-        h2 = z3_b
-        variables = []
+        neg_points = neg_points or []
+
+        if optimize:
+            solver = Optimize()
+        else:
+            solver = Solver()
+            solver.set("zero_accuracy",10)
+        solver.set("timeout", timeout)
+
+        ti = self.offset
+        smt_ti = Int("b")
+        if ti:
+            solver.add(min(0,ti) <= smt_ti, smt_ti <= max(0,ti))
+            if optimize:
+                # Try to minimize the independent term
+                solver.minimize(smt_ti)
+        else:
+            solver.add(smt_ti == 0)
+
+        variables = set()
+        variables_positive = set()
+
+        positive_x = True
+        non_trivial = False
+        some_consume = False
+        some_produce = False
+
+        diff_sol = smt_ti != ti
+        smt_keep_sol = ti
+        smt_is_sol = smt_ti
 
         for t_id, coeff in enumerate(self.normal):
-            if not coeff:
-                solver.add(z3.Int("a%s"%t_id) == 0)
-                continue
-            smt_coeff = z3.Int("a%s"%t_id)
-            var = z3.Int("x%s"%t_id)
+            # SMT coefficient
+            smt_coeff = Int("a%s" % t_id)
+            if optimize:
+                # Try to minimize the coefficient
+                solver.minimize(smt_coeff)
+            # SMT variable
+            smt_var = Int("x%s"%t_id)
 
-            variables.append(var)
-            possible_x = z3.And(possible_x, var >= 0)
+            # Add SMT varible to the set of variables
+            variables.add(smt_var)
+            # Add SMT varible basic constraint to the set
+            variables_positive.add(smt_var >= 0)
 
-            solver.add(min(0,coeff) <= smt_coeff, smt_coeff <= max(0, coeff))
-            if not neg_points and not simple:
-                some_consume = z3.Or(some_consume, smt_coeff < 0)
-                some_produce = z3.Or(some_produce, smt_coeff > 0)
+            if coeff:
+                # At least one SMT coefficient should be non zero
+                non_trivial = Or(non_trivial, smt_coeff != 0)
+                # At least one SMT coefficient should be different
+                diff_sol = Or(diff_sol, smt_coeff != coeff)
+                # Original solution with SMT variable
+                smt_keep_sol += coeff * smt_var
+                # SMT solution with SMT variable
+                smt_is_sol += smt_coeff * smt_var
+                # Keep SMT coefficient between original bundaries
+                solver.add(min(0,coeff) <= smt_coeff, smt_coeff <= max(0, coeff))
 
-            non_trivial = z3.Or(non_trivial, smt_coeff != 0)
-            diff_sol = z3.Or(diff_sol, smt_coeff != coeff)
-            h1 = h1 + coeff * var
-            h2 = h2 + smt_coeff * var
+                if not neg_points and not simple:
+                    some_produce = Or(some_produce, smt_coeff > 0)
+                    some_consume = Or(some_consume, smt_coeff < 0)
+            else:
+                solver.add(smt_coeff == 0)
 
-        if not neg_points and not simple:
-            solver.add(z3.simplify(some_consume))
-            solver.add(z3.simplify(some_produce))
-        if not len(list(neg_points)):
-	        solver.add(z3.simplify(non_trivial))
-	if str(z3.simplify(diff_sol)) != False:
-		solver.add(z3.simplify(diff_sol))
-        solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(possible_x, h1 <= 0), h2 <= 0))))
+    #This is what we want:
+        if not neg_points:
+            # If there is not negative info, avoid trivial solution (i.e. Not all zero)
+            solver.add(simplify(non_trivial))
+            if not simple:
+                solver.add(simplify(some_consume))
+                solver.add(simplify(some_produce))
+        # A different solution (i.e. "better")
+        solver.add(simplify(diff_sol))
+        # If it was a solution before, keep it that way
+        solver.add(simplify(ForAll(list(variables), Implies(And(Or(list(variables_positive)), smt_keep_sol <= 0), smt_is_sol <= 0))))
 
-        ## non negative point shouldn't be a solution
-        for np in list(neg_points):
-            smt_np = False
+        # New solution shouldn't add a negative point
+        for np in neg_points:
+            smt_ineq_np = self.offset
             ineq_np = self.offset
             for t_id, coeff in enumerate(self.normal):
-                if coeff and np[t_id]:
-                    z3_var = z3.Int("a%s"%(t_id))
-                    ineq_np = ineq_np + z3_var * np[t_id]
-            smt_np = z3.simplify(z3.Or(smt_np, ineq_np > 0))
-            if str(smt_np) != 'False': 
-		solver.add(smt_np)
+                ineq_np = ineq_np + coeff * np[t_id]
+                smt_coeff = Int("a%s"%(t_id))
+                smt_ineq_np = smt_ineq_np + smt_coeff * np[t_id]
+            if ineq_np > 0:
+                solver.add(simplify(smt_ineq_np > 0))
 
         sol = solver.check()
-        if sol == z3.unsat:
+        if sol == unsat:
             ret = False
             logger.info('Z3 returns UNSAT: Cannot reduce without adding neg info')
-        elif sol == z3.unknown:
+        elif sol == unknown:
             ret = False
             logger.info('Z3 returns UNKNOWN: Cannot reduce in less than %s miliseconds', timeout)
         else:
             ret = solver.model()
-        del(solver)
-        del(sol)
         return ret
 
     def simplify(self, sol):
         normal = []
         if sol:
-            offset = sol[z3.Int("b")].as_long()
+            offset = sol[Int("b")].as_long()
 
             for t_id, coeff in enumerate(self.normal):
-                smt_coeff = z3.Int("a%s"%(t_id))
+                smt_coeff = Int("a%s"%(t_id))
                 normal.append(int(str(sol[smt_coeff] or 0)))
 
             self.normal = normal
             self.offset = offset
 
     def smt_facet_simplify(self, neg_points=None, timeout=0):
-        global counter
-        counter = counter + 1
+        global COUNTER
+        COUNTER += 1
         neg_points = neg_points or []
-        logger.debug('SMT simplifying facet #%s: %s',counter, self)
+        logger.debug('SMT simplifying facet #%s: %s',COUNTER, self)
         sol = self.smt_solution(timeout, neg_points=neg_points)
         while sol:
             self.simplify(sol)

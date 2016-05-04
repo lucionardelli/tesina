@@ -68,7 +68,8 @@ if __name__ == '__main__':
     from mains import pnml_comparator_main
     try:
         pnml_comparator_main()
-    except:
+    except Exception, err:
+        logger.error('Error: %s' % err, exc_info=True)
         type, value, tb = sys.exc_info()
         traceback.print_exc()
         #pdb.post_mortem(tb)

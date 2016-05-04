@@ -36,7 +36,8 @@ if __name__ == '__main__':
         xes_file = sys.argv[2]
         checker = Checker(pnml_file, xes_file)
         checker.check_hull()
-    except:
+    except Exception, err:
+        logger.error('Error: %s' % err, exc_info=True)
         type, value, tb = sys.exc_info()
         traceback.print_exc()
         pdb.post_mortem(tb)

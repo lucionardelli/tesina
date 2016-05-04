@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
 from pyhull import qconvex
-from utils import get_positions
 from halfspace import Halfspace
 from parser import XesParser
 from custom_exceptions import IncorrectOutput, CannotGetHull, LostPoints
@@ -10,7 +9,17 @@ from redirect_output import stderr_redirected
 from config import logger
 
 import sys
-import z3
+from z3 import (Solver,
+    Optimize,
+    Int,
+    Or,
+    And,
+    Implies,
+    ForAll,
+    simplify,
+    unsat,
+    unknown
+)
 
 class Qhull(StopWatchObj):
 
@@ -206,10 +215,10 @@ class Qhull(StopWatchObj):
     def can_eliminate(self, candidate, npoint):
         """
           Checks whether we can safely (i.e. whitout adding the
-          negativo point to the hull) remove one facet
+          negative point to the hull) remove one facet
         """
         ret = False
-        for facet in (set(self.facets) - set(candidate)):
+        for facet in set(self.facets) - set(candidate):
             if not facet.inside(npoint):
                 ret = True
                 break
@@ -227,10 +236,10 @@ class Qhull(StopWatchObj):
                 tmpqhull.facets = list(set(facets)-set([facet]))
                 simplify = True
                 for nidx, npoint in enumerate(self.neg_points):
-                    logger.info('Trying npoint #%s'%nidx)
+                    logger.debug('Trying npoint #%s'%nidx)
                     if npoint in tmpqhull:
                         simplify = False
-                        logger.info('Failed due to '+str(nidx))
+                        logger.debug('Failed due to %s' % nidx)
                         break
                 if simplify:
                     facets.pop(idx - popped)
@@ -251,83 +260,123 @@ class Qhull(StopWatchObj):
 
     # Support for Z3 SMT-Solver
     @StopWatchObj.stopwatch
-    def smt_solution(self,timeout):
-        solver = z3.Solver()
+    def smt_solution(self,timeout, optimize=False):
+        if optimize:
+            solver = Optimize()
+        else:
+            solver = Solver()
+            solver.set("zero_accuracy",10)
         solver.set("timeout", timeout)
-        solver.set("zero_accuracy",10)
 
-        diff_sol = z3.Or(False)
-        non_trivial = z3.Or(False)
-        A1 = True
-        A2 = True
-        variables = []
+
+        non_trivial = False
+        diff_sol = False
+        smt_keep_sol = True # a.k.a A1
+        smt_is_sol = True # a.k.a A2
+
+        some_consume = False
+        some_produce = False
+        variables = set()
+        variables_positive = set()
         for p_id, place in enumerate(self.facets):
-            b = place.offset
-            smt_b = z3.Int("b%s"%(p_id))
-            if b > 0:
-                solver.add(smt_b >= 0)
-                solver.add(smt_b <= b)
-            elif b< 0:
-                solver.add(smt_b <= 0)
-                solver.add(smt_b >= b)
-            else:
-                solver.add(smt_b == 0)
+            ti = place.offset
+            smt_ti = Int("b%s" % p_id)
 
-            pos_x = True
-            # If halfspace has coefficients adding 1 it's
+            if ti:
+                solver.add(min(0,ti) <= smt_ti, smt_ti <= max(0, ti))
+            else:
+                solver.add(smt_ti == 0)
+
+
+            facet_non_trivial = False
+            facet_diff_sol = False
+            smt_facet_eval = ti
+            smt_facet_sol = ti
+
+            # If halfspace's coefficients add to 1 it's
             # as simple as it gets
             simple = sum(abs(x) for x in place.normal) <= 1
+            # TODO y esto?
             diff_sig = reduce(lambda x,y:x*y, [x + 1 for x in place.normal]) < 1
 
-            h1 = b
-            h2 = smt_b
-            some_consume = False
-            some_produce = False
-            for t_id, val in enumerate(place.normal):
-                smt_val = z3.Int("a%s-%s"%(p_id,t_id))
-                x = z3.Int("x%s"%(t_id))
-                variables.append(x)
-                pos_x = z3.And(pos_x, x >= 0)
-                if val:
-                    if val > 0:
-                        solver.add(0 <= smt_val)
-                        solver.add(smt_val <= val)
-                    else:
-                        solver.add(val <= smt_val)
-                        solver.add(smt_val <= 0)
+            for t_id, coeff in enumerate(place.normal):
+                # SMT coefficient
+                smt_coeff = Int("a%s,%s" % (p_id, t_id))
+                if optimize:
+                    # Try to minimize the coefficient
+                    solver.minimize(smt_coeff)
+                # SMT variable
+                smt_var = Int("x%s" % t_id)
+
+                # Add SMT varible to the set of variables
+                variables.add(smt_var)
+                # Add SMT varible basic constraint to the set
+                variables_positive.add(smt_var >= 0)
+                if coeff:
+                    # At least one SMT coefficient should be non zero
+                    facet_non_trivial = Or(facet_non_trivial, smt_coeff != 0)
+                    # At least one SMT coefficient should be different
+                    facet_diff_sol = Or(facet_diff_sol, smt_coeff != coeff)
+                    # Original solution with SMT variable
+                    smt_facet_eval += coeff * smt_var
+                    # SMT solution with SMT variable
+                    smt_facet_sol += smt_coeff * smt_var
+                    # Keep SMT coefficient between original bundaries
+                    solver.add(min(0,coeff) <= smt_coeff, smt_coeff <= max(0, coeff))
+
                     if not self.neg_points and not simple and diff_sig:
-                        some_consume = z3.Or(some_consume, smt_val < 0)
-                        some_produce = z3.Or(some_produce, smt_val > 0)
-                    non_trivial = z3.Or(non_trivial, smt_val != 0)
-                    diff_sol = z3.Or(diff_sol, smt_val != val)
-                    h1 = h1 + val * x
-                    h2 = h2 + smt_val * x
+                        some_produce = Or(some_produce, smt_coeff > 0)
+                        some_consume = Or(some_consume, smt_coeff < 0)
                 else:
-                    solver.add(smt_val == 0)
+                    # Keep zero coefficients unchanged
+                    solver.add(smt_coeff == 0)
+            if not self.neg_points:
+                # Avoid trivial solution (i.e. all zeros as coeff)
+                non_trivial = Or(non_trivial, facet_non_trivial)
+            # Solution of smt must be different
+            diff_sol = Or(diff_sol, facet_diff_sol)
+            # If point is in old-solution should be in smt-solution
+            smt_keep_sol = And(smt_keep_sol, smt_facet_eval <= 0)
+            # Solutions shoul be a solution
+            smt_is_sol = And(smt_is_sol, smt_facet_sol <= 0)
+
             if not self.neg_points and not simple and diff_sig:
-                solver.add(z3.simplify(some_consume))
-                solver.add(z3.simplify(some_produce))
-            A1 = z3.And(A1, h1 <= 0)
-            A2 = z3.And(A2, h2 <= 0)
-        solver.add(z3.simplify(non_trivial))
-        solver.add(z3.simplify(diff_sol))
-        solver.add(z3.simplify(z3.ForAll(variables, z3.Implies(z3.And(pos_x, A1), A2))))
-        # non negative point shouldn't be a solution
+                solver.add(simplify(some_consume))
+                solver.add(simplify(some_produce))
+
+            if optimize:
+                # Try to minimize the independent term
+                solver.minimize(smt_ti)
+
+    # This is what we want:
+        if not self.neg_points:
+            # If there is not negative info, avoid trivial solution (i.e. Not all zero)
+            solver.add(simplify(non_trivial))
+        # A different solution (i.e. "better")
+        solver.add(simplify(diff_sol))
+        # If it was a solution before, keep it that way
+        solver.add(simplify(ForAll(list(variables), Implies(And(Or(list(variables_positive)), smt_keep_sol), smt_is_sol))))
+
+        # Negative point shouldn't be a solution
         for np in self.neg_points:
             smt_np = False
             for p_id, place in enumerate(self.facets):
-                ineq_np = place.offset
-                for t_id, val in enumerate(place.normal):
-                    if np[t_id]:
-                        z3_var = z3.Int("a%s-%s"%(p_id,t_id))
-                        ineq_np = ineq_np + z3_var * np[t_id]
-                smt_np = z3.simplify(z3.Or(smt_np, ineq_np > 0))
-            solver.add(smt_np)
+                place_at_np = Int("b%s" % p_id)
+                for t_id, coeff in enumerate(place.normal):
+                    # If coefficient was zero, it will remain zero
+                    if coeff and np[t_id]:
+                        smt_coeff = Int("a%s,%s" % (p_id, t_id))
+                        place_at_np = smt_ti + smt_coeff * np[t_id]
+
+                smt_np = Or(smt_np, place_at_np > 0)
+            # Keep out (NOTE halfspaces are Ax + b <= 0)
+            solver.add(simplify(smt_np))
+
         sol = solver.check()
-        if sol == z3.unsat:
+        if sol == unsat:
             ret = False
             logger.info('Z3 returns UNSAT: Cannot reduce without adding neg info')
-        elif sol == z3.unknown:
+        elif sol == unknown:
             ret = False
             logger.info('Z3 returns UNKNOWN: Cannot reduce in less than %s miliseconds', timeout)
         else:
@@ -336,22 +385,22 @@ class Qhull(StopWatchObj):
 
     @StopWatchObj.stopwatch
     def smt_simplify(self, sol):
-        facets = []
+        facets = set()
         if sol:
             for p_id, place in enumerate(self.facets):
                 normal = []
-                b = sol[z3.Int("b%s"%(p_id))].as_long()
+                ti = sol[Int("b%s"%(p_id))].as_long()
                 for t_id, val in enumerate(place.normal):
-                    smt_val = z3.Int("a%s-%s"%(p_id,t_id))
-                    normal.append(int(str(sol[smt_val] or 0)))
+                    smt_coeff = Int("a%s,%s" % (p_id,t_id))
+                    normal.append(sol[smt_coeff].as_long())
                 if sum(abs(x) for x in normal) != 0:
-                    f = Halfspace(normal, b, integer_vals=False)
-                    if not f in facets:
-                        facets.append(f)
-            self.facets = facets
+                    facets.add(Halfspace(normal, ti))
+                else:
+                    logger.warning('Made all coefficients zero...weird!')
+            self.facets = list(facets)
 
     @StopWatchObj.stopwatch
-    def smt_hull_simplify(self,timeout=0):
+    def smt_hull_simplify(self, timeout=0):
         sol = self.smt_solution(timeout)
         while sol:
             self.smt_simplify(sol)
@@ -360,14 +409,15 @@ class Qhull(StopWatchObj):
     @StopWatchObj.stopwatch
     def smt_facet_simplify(self,timeout=0):
         for facet in self.facets:
-            facet.smt_facet_simplify(neg_points=self.neg_points,timeout=timeout)
+            facet.smt_facet_simplify(neg_points=self.neg_points, timeout=timeout)
 
 if __name__ == '__main__':
     import sys, traceback,pdb
     from mains import qhull_main
     try:
         qhull_main()
-    except:
+    except Exception, err:
+        logger.error('Error: %s' % err, exc_info=True)
         type, value, tb = sys.exc_info()
         traceback.print_exc()
         #pdb.post_mortem(tb)

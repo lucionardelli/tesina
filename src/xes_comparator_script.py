@@ -65,6 +65,7 @@ NOTE: Do you have the needed environment variables?
                 print 'Error: ', err.message
             else:
                 print 'Error: ', err
+            logger.error('Error: %s' % err, exc_info=True)
             raise
         return ret
 
@@ -76,6 +77,7 @@ if __name__ == '__main__':
     try:
         main()
     except Exception, err:
+        logger.error('Error: %s' % err, exc_info=True)
         type, value, tb = sys.exc_info()
         traceback.print_exc()
         print err

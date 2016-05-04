@@ -145,6 +145,6 @@ class Comparator(object):
             try:
                 qhull.all_in(parser.pv_set)
             except Exception, err:
-                logger.error("Error running check_hull for %s, file %s",benchmark, log_file)
+                logger.error("Error running check_hull for %s, file %s",benchmark, log_file, exc_info=True)
                 raise
         return True
