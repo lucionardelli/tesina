@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8
+
 from qhull import Qhull
+#from smt_hull import SMTHull as Qhull
 from parser import XesParser
 from text_parser import AdHocParser
 from pnml import PnmlParser

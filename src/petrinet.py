@@ -6,6 +6,7 @@ from lxml import etree
 import pdb
 
 from qhull import Qhull
+#from smt_hull import SMTHull as Qhull
 from halfspace import Halfspace
 
 from config import logger

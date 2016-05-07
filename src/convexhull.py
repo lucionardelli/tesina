@@ -255,8 +255,19 @@ class ConvexHull(StopWatchObj):
             # If halfspace's coefficients add to 1 it's
             # as simple as it gets
             simple = sum(abs(x) for x in place.normal) <= 1
-            # TODO y esto?
-            diff_sig = reduce(lambda x,y:x*y, [x + 1 for x in place.normal]) < 1
+            # do_cons_prod indicates if the place has incoming and outgoing transitions
+            do_cons_prod = False
+            consume = produce = 0
+            for coeff in place.normal:
+                if coeff > 0:
+                    produce = 1
+                elif coeff < 0:
+                    consume = 1
+                if consume * produce:
+                    do_cons_prod = True
+                    break
+
+            do_cons_prod = reduce(lambda x,y:x*y, [x + 1 for x in place.normal]) < 1
 
             for t_id, coeff in enumerate(place.normal):
                 # SMT coefficient
@@ -283,7 +294,7 @@ class ConvexHull(StopWatchObj):
                     # Keep SMT coefficient between original bundaries
                     solver.add(min(0,coeff) <= smt_coeff, smt_coeff <= max(0, coeff))
 
-                    if not self.neg_points and not simple and diff_sig:
+                    if not self.neg_points and not simple and do_cons_prod:
                         some_produce = Or(some_produce, smt_coeff > 0)
                         some_consume = Or(some_consume, smt_coeff < 0)
                 else:
@@ -299,7 +310,7 @@ class ConvexHull(StopWatchObj):
             # Solutions shoul be a solution
             smt_is_sol = And(smt_is_sol, smt_facet_sol <= 0)
 
-            if not self.neg_points and not simple and diff_sig:
+            if not self.neg_points and not simple and do_cons_prod:
                 solver.add(simplify(some_consume))
                 solver.add(simplify(some_produce))
 

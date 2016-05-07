@@ -3,6 +3,7 @@
 from halfspace import Halfspace
 from custom_exceptions import IncorrectOutput, CannotGetHull
 from convexhull import ConvexHull
+from stopwatch import StopWatchObj
 from config import logger
 
 from itertools import izip
@@ -23,7 +24,7 @@ class SMTHull(ConvexHull):
          input: Output solution for Z3 Solver
          output: (dimension,nbr_facets,[halfspaces])
         """
-        dim = len(self.points[0])
+        dim = len(list(self.points)[0])
 
         facets = []
         try:
@@ -31,24 +32,24 @@ class SMTHull(ConvexHull):
             for yaxis in xrange(facet_number):
                 ti = Int('b%s' % yaxis)
                 offset = model[ti].as_long()
-                coeff = []
+                coefficients = []
                 for xaxis in xrange(dim):
-                    coeff.append(model[Int('a%s,%s'%(yaxis,xaxis))])
-                hs = Halfspace(coeff,offset)
+                    coeff = model[Int('a%s,%s'%(yaxis,xaxis))].as_long()
+                    coefficients.append(coeff)
+                hs = Halfspace(coefficients,offset)
                 facets.append(hs)
         except Exception, err:
             logger.error('Incorrect output of smt-hull! Error: %s', err)
             raise IncorrectOutput()
         return (dim, facet_number, facets)
 
-
-
     def __smt_solution(self, equation_number):
         if len(self.points) < 1:
             logger.info('Cannot find solution for SMT-HULL with no points!')
             raise Exception('Cannot find solution for SMT-HULL with no points!')
         timeout = 3000 # TODO As argument?
-        dim = len(list(points)[0])
+        points = self.points
+        dim = len(list(self.points)[0])
         logger.info('Searching for hull in dimension %s based on %s points using SMT',
                 dim,len(points))
         neg_points = self.neg_points or []
@@ -65,7 +66,8 @@ class SMTHull(ConvexHull):
         matrix = []
         evaluations = set()
         negatives = {}
-        for yaxis in xrange(equation_nbr):
+        # Build the SMT-System
+        for yaxis in xrange(equation_number):
             # Define the list of coefficients for this equation
             coeff_list = Ints(' '.join('a%s,%s'%(yaxis,xaxis) for xaxis in xrange(dim)))
             # Define independent term for this equation
@@ -73,26 +75,28 @@ class SMTHull(ConvexHull):
             # Build the matrix
             matrix.append(coeff_list + [ti])
 
-            # Every point should be a solution of the system
-            # i.e. it should we true that A[yaxis] * point + b[yaxis] >= 0
-            for point in points:
-                evaluation = ti
-                for coeff, val in izip(coeff_list, point):
-                    if val:
-                        evaluation += coeff * val
-                # Add to the "evaluation restriction set"
-                evaluations.add(evaluation >= 0)
-            # Every negative point should NOT be a solution of the system
-            # i.e. it should we true that A[E] * npoint + b[E] < 0 for some E
-            for npoint in neg_points:
-                this_npoint_set = negatives.setdefault(npoint,set())
-                evaluation = ti
-                for coeff, nval in izip(coeff_list, npoint):
-                    if nval:
-                        evaluation += coeff * nval
-                # Add to this point "negative restriction set"
-                this_npoint_set.add(evaluation < 0)
+        # Every point should be a solution of the system
+        # i.e. it should we true that A[yaxis] * point + b[yaxis] >= 0
+        for idx, point in enumerate(points):
+            evaluation = ti
+            for coeff, val in izip(coeff_list, point):
+                if val:
+                    evaluation += coeff * val
+            # Add to the "evaluation restriction set"
+            evaluations.add(evaluation >= 0)
+        # Every negative point should NOT be a solution of the system
+        # i.e. it should we true that A[E] * npoint + b[E] < 0 for some E
+        #TODO TODO
+        for idx, npoint in enumerate(list(neg_points)[0:20]):
+            this_npoint_set = negatives.setdefault(npoint,set())
+            evaluation = ti
+            for coeff, nval in izip(coeff_list, npoint):
+                if nval:
+                    evaluation += coeff * nval
+            # Add to this point "negative restriction set"
+            this_npoint_set.add(evaluation < 0)
         # Build the SMT problem
+        logger.info("Building solver for solution with %s equations",equation_number)
         solver = Solver()
         solver.set("zero_accuracy",10)
         solver.set("timeout", timeout)
@@ -103,7 +107,7 @@ class SMTHull(ConvexHull):
             solver.add(Or(list(this_npoint_set)))
 
         # Add facetnumber to the solver's solution for used when parsing output
-        solver.add(Int("FacetNumber") == equation_nbr)
+        solver.add(Int("FacetNumber") == equation_number)
 
         sol = solver.check()
         if sol == unsat:
@@ -114,27 +118,40 @@ class SMTHull(ConvexHull):
             logger.info('Z3 returns UNKNOWN: Cannot get hull in less than %s miliseconds', timeout)
         else:
             ret = solver.model()
+            logger.info('Z3 returns valid model in lest than %s miliseconds', timeout)
+            logger.debug('Z3 Model:\n %s', ret)
         return ret
 
-    def __smt_hull_bs(min_eq_nbr=1, max_eq_nbr=99):
+    def __smt_hull_bs(self, min_eq_nbr=1, max_eq_nbr=99):
+        if max_eq_nbr > 5000:
+            logger.error('Cannot get solution with less than 5000 equations')
+            raise CannotGetHull()
+        logger.info("Calling SMT-Hull bisecting from %s to %s",min_eq_nbr, max_eq_nbr)
         middle = (min_eq_nbr + max_eq_nbr) / 2
         sol = self.__smt_solution(middle)
-        if min_eq_nbr == max_eq_nbr:
+        if not sol:
+            # Cannot get solution, try with more equations
+            logger.debug("Cannot get solution, try with more equations")
+            ret = self.__smt_hull_bs(min_eq_nbr=middle, max_eq_nbr=(max_eq_nbr * 2))
+        elif min_eq_nbr in (middle,max_eq_nbr):
+            # Found best solution!
+            logger.info("Found the best solution with %s equations",middle)
             ret = sol
-        elif min_eq_nbr < middle:
-            ret = self.__smt_qull_bs(min_eq_nbr=min_eq_nbr, max_eq_nbr=middle)
-        elif sol:
-            ret = sol
-        elif max_eq_nbr > middle:
-            ret = self.__smt_qull_bs(min_eq_nbr=middle, max_eq_nbr=max_midle)
+        else:
+            # Found solution. Is there a better one?
+            assert min_eq_nbr <= middle, "Error bisecting for SMT-Hull"
+            ret = self.__smt_hull_bs(min_eq_nbr=min_eq_nbr, max_eq_nbr=middle) or sol
         return ret
 
     @StopWatchObj.stopwatch
     def compute_hiperspaces(self):
         # Checks made in parent class
-        super(Qull,self).compute_hiperspaces()
+        super(SMTHull,self).compute_hiperspaces()
+        if not self.neg_points:
+            logger.error('No negative points, cannot get hull using SMT!')
+            raise CannotGetHull()
 
-        model = self.__smt_hull_bs(min_eq_nbr=1, max_eq_nbr=99)
+        model = self.__smt_hull_bs(min_eq_nbr=1, max_eq_nbr=20)
         try:
             dim, facets_nbr, facets = self.__parse_smt_solution(model)
         except IncorrectOutput, err:

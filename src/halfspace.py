@@ -238,12 +238,13 @@ class Halfspace(Halfspace):
 
         # New solution shouldn't add a negative point
         for np in neg_points:
-            smt_ineq_np = self.offset
-            ineq_np = self.offset
+            smt_ineq_np = smt_ti
+            ineq_np = ti
             for t_id, coeff in enumerate(self.normal):
-                ineq_np = ineq_np + coeff * np[t_id]
+                ineq_np += coeff * np[t_id]
                 smt_coeff = Int("a%s"%(t_id))
-                smt_ineq_np = smt_ineq_np + smt_coeff * np[t_id]
+                smt_ineq_np += smt_coeff * np[t_id]
+            # If neg point was out of this halfspace, keep it out!
             if ineq_np > 0:
                 solver.add(simplify(smt_ineq_np > 0))
 
