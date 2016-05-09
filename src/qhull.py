@@ -4,6 +4,7 @@ from halfspace import Halfspace
 from custom_exceptions import IncorrectOutput, CannotGetHull, LostPoints
 from redirect_output import stderr_redirected
 from convexhull import ConvexHull
+from stopwatch import StopWatchObj
 from config import logger
 
 from pyhull import qconvex

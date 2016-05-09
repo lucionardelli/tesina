@@ -246,15 +246,16 @@ class Halfspace(Halfspace):
                 smt_ineq_np += smt_coeff * np[t_id]
             # If neg point was out of this halfspace, keep it out!
             if ineq_np > 0:
+                logger.debug('Adding HS SMT-NEG restriction')
                 solver.add(simplify(smt_ineq_np > 0))
 
         sol = solver.check()
         if sol == unsat:
             ret = False
-            logger.info('Z3 returns UNSAT: Cannot reduce without adding neg info')
+            logger.info('Z3 returns UNSAT: Cannot simplify HS without adding neg info')
         elif sol == unknown:
             ret = False
-            logger.info('Z3 returns UNKNOWN: Cannot reduce in less than %s miliseconds', timeout)
+            logger.info('Z3 returns UNKNOWN: Cannot simplify HS in less than %s miliseconds', timeout)
         else:
             ret = solver.model()
         return ret
