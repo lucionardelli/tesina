@@ -246,7 +246,7 @@ class Halfspace(Halfspace):
                 smt_ineq_np += smt_coeff * np[t_id]
             # If neg point was out of this halfspace, keep it out!
             if ineq_np > 0:
-                logger.debug('Adding HS SMT-NEG restriction')
+                logger.info('Adding HS SMT-NEG restriction')
                 solver.add(simplify(smt_ineq_np > 0))
 
         sol = solver.check()

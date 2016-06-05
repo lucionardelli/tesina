@@ -35,6 +35,30 @@ class AdHocParser(GenericParser):
         return True
 
 
+    def _make_parikhs_vector(self):
+        """
+            make parickhs vector of all traces
+        """
+        hiper_zero = np.array([0]*self.dim)
+        # Zero always belongs to the point lattice
+        self.pv_set.add(tuple(hiper_zero))
+        for idx,trace in self.traces.items():
+            # Zero always belong to a Parikhs vector
+            this_pv_trace = self.pv_traces.setdefault(idx,[hiper_zero])
+            for val in trace['trace']:
+                pos = self.event_dictionary.get(val)
+                # Copy last point
+                last_pv = this_pv_trace[-1].copy()
+                # And add one to the corresponding event
+                self.add_to_position(last_pv, pos, value=1)
+                # Add it to the point set
+                self.pv_set.add(tuple(last_pv))
+                # Add the Parikh vector to the lattice of all points
+                this_pv_trace.append(last_pv)
+        self.pv_array = np.array(list(self.pv_set))
+        return True
+
+
 if __name__ == '__main__':
     import sys, traceback
     from mains import parser_main

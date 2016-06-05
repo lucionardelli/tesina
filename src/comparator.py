@@ -32,7 +32,7 @@ class Comparator(object):
         qhull = self.qhull_no_smt
         old_len = len(qhull.facets)
         qhull.no_smt_simplify(max_coef=self.max_coef)
-        if log_file:
+        if log_file and log_file.endswith('.xes'):
             # Sanity check
             qhull.all_in_file(log_file, event_dictionary=event_dictionary)
         removed = old_len - len(qhull.facets)

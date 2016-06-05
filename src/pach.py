@@ -198,10 +198,15 @@ class PacH(StopWatchObj):
     @property
     def qhull(self):
         if not self._qhull:
-            self._qhull = self.get_qhull(self.pv_array)
+            if self.filename.endswith('.pnml'):
+                self._qhull = self.parsed_petrinet.get_qhull(neg_points=self.npv_set)
+                self.dim = self._qhull.dim
+            else:
+                self._qhull = self.get_qhull(self.pv_array)
             self._qhull.prepare_negatives()
             self.initial_complexity = self._qhull.complexity()
         return self._qhull
+
 
     @qhull.setter
     def qhull(self, qhull):
@@ -266,7 +271,7 @@ class PacH(StopWatchObj):
         # Options are on the hull level, on every facet or none
         self.smt_simplify()
         self.generate_output_file()
-        return complexity
+        return self.complexity
 
     def get_def_pnml_name(self, extension='pnml'):
         # Tomo el archivo de entrada y le quito la extensión '.xes' si la tiene
