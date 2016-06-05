@@ -336,7 +336,7 @@ class ConvexHull(StopWatchObj):
                     # If coefficient was zero, it will remain zero
                     if coeff and np[t_id]:
                         smt_coeff = Int("a%s,%s" % (p_id, t_id))
-                        place_at_np = smt_ti + smt_coeff * np[t_id]
+                        place_at_np = place_at_np + smt_coeff * np[t_id]
 
                 smt_np = Or(smt_np, place_at_np > 0)
             # Keep out (NOTE halfspaces are Ax + b <= 0)
