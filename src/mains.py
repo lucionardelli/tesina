@@ -13,6 +13,7 @@ from comparator_pnml import ComparatorPnml
 from negative_parser import NegativeParser
 from pnml import PnmlParser
 from config import CONFIGS
+from config import logger
 
 config_options = '\n'.join(['\t%s :\t\t %s'%(k,v) for k,v in CONFIGS.items()])
 
