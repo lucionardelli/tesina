@@ -60,7 +60,8 @@ class PetriNet(object):
             place = etree.SubElement(page, 'place', id=pl_id)
             place_name = etree.SubElement(place, 'name')
             place_name_text = etree.SubElement(place_name, 'text')
-            place_name_text.text = pl.label
+            #place_name_text.text = pl.label
+            place_name_text.text = "P%s"%pl_id
             place_init_mark = etree.SubElement(place, 'initialMarking')
             place_init_mark_text = etree.SubElement(place_init_mark, 'text')
             place_init_mark_text.text = str(pl.marking)
