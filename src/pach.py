@@ -16,12 +16,15 @@ import numpy as np
 from random import sample
 from datetime import datetime
 import os
+import copy
 
 from custom_exceptions import CannotGetHull, WrongDimension, CannotIntegerify
 from sampling import sampling
 from projection import projection
 from stopwatch import StopWatchObj
 
+
+import pnml
 
 from config import logger
 
@@ -263,7 +266,18 @@ class PacH(StopWatchObj):
         logger.debug('Starting parsing')
         self.parse()
         logger.debug('Starting modeling')
-        self.model()
+        if self.filename.endswith('.pnml'):
+            self._qhull = copy.deepcopy(self.parsed_petrinet.get_qhull(neg_points=list(self.npv_set)))
+            #self._qhull = copy.deepcopy(self.parsed_petrinet.get_qhull())
+			#self._qhull.compute_hiperspaces()
+            self._qhull.prepare_negatives()
+            self.initial_complexity = self._qhull.complexity()
+            self.dim = self._qhull.dim
+            print "Initial:",self.initial_complexity
+            #self._check_hull()
+        else:
+            self._qhull = None
+            self.model()
         # Remove unnecesary facets wrt neg traces (if any)
         self.no_smt_simplify()
         # Remove unnecesary facets wrt neg traces
